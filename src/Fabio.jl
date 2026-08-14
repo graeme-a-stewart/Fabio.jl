@@ -76,14 +76,16 @@ include("detect.jl")
 include("file.jl")
 include("api.jl")
 
+include("formats/bruker.jl")
 include("formats/cbf.jl")
+include("formats/dtrek.jl")
 include("formats/edf.jl")
 include("formats/esperanto.jl")
 include("formats/mar345.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export CBF, EDF, Esperanto, Mar345, NPY, TIFFLike
+export Bruker, CBF, Dtrek, EDF, Esperanto, Mar345, NPY, TIFFLike
 
 """
     registerdefaults!()
@@ -109,6 +111,23 @@ function registerdefaults!()
         description = "CIF Binary Format (Pilatus and others)",
         extensions = ["cbf"],
         magic = [Magic("###CBF: VERSION"), Magic("###CBF:")],
+        writer = false,
+    )
+    register!(
+        Dtrek();
+        name = :dtrek,
+        description = "d*TREK / ADSC Quantum",
+        extensions = ["img"],
+        # Longer than EDF's bare "{", so the registry orders it first without special cases.
+        magic = [Magic("{\nHEA"), Magic("{\r\nHEA")],
+        writer = false,
+    )
+    register!(
+        Bruker();
+        name = :bruker,
+        description = "Bruker area detector (FORMAT:86)",
+        extensions = ["sfrm"],
+        magic = [Magic("FORMAT :")],
         writer = false,
     )
     register!(
