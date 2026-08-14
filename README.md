@@ -5,8 +5,8 @@ Reading of 2D detector images and their metadata, after the Python
 format, handles compression, and hands back the pixels as a Julia array of the type actually
 stored in the file, alongside the header.
 
-**Status: Phase 1 in progress.** The core architecture is complete; EDF, CBF, Esperanto and
-NumPy readers are working. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+**Status: Phase 1 in progress.** The core architecture is complete; CBF, EDF, Esperanto,
+mar345 and NumPy readers are working. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -30,8 +30,8 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: CBF, EDF, Esperanto, NumPy `.npy` | `src/formats/` |
-| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl` |
+| Formats: CBF, EDF, Esperanto, mar345, NumPy `.npy` | `src/formats/` |
+| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
 | Blob decoding, byte order, orientation | `src/blob.jl` |
@@ -81,22 +81,38 @@ The suite is self-contained: it writes its own fixtures rather than downloading 
 detector data is opt-in, since it is generally not redistributable:
 
 ```bash
-FABIO_JL_LOCAL_TESTDATA=/path/to/esperanto/files julia --project=. -e 'using Pkg; Pkg.test()'
+FABIO_JL_LOCAL_TESTDATA=/path/to/esperanto/files \
+FABIO_JL_MAR345_TESTDATA=/path/to/mar2300/files \
+  julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-That testset checks a real 2048² AGI-bitfield frame against reference statistics produced by
-FabIO itself, and asserts that the threaded row-indexed decoder agrees with the sequential one
-across the whole frame.
+Those testsets check real frames against reference statistics produced by FabIO itself — a
+2048² AGI-bitfield Esperanto frame and a 2300² mar345 frame — and assert that the threaded
+row-indexed AGI decoder agrees with the sequential one across a whole frame. The mar345 files
+are the dataset the FabIO documentation uses for its file-series example, Zenodo
+[10.5281/zenodo.2546760](https://doi.org/10.5281/zenodo.2546760).
 
 ## Performance
 
-Decoding one 2048² AGI bitfield frame, measured on an 8-thread machine:
+Measured on an 8-thread machine, against FabIO on the same files.
+
+Decoding one 2048² AGI bitfield frame (Esperanto):
 
 | | per frame |
 |---|---|
-| FabIO (its AGI decoder is pure Python — the Cython extension only covers compression) | 793 ms |
+| FabIO — its AGI decoder is pure Python; the Cython extension only covers compression | 793 ms |
 | Fabio.jl, sequential | 9.7 ms |
 | Fabio.jl, row-indexed across 8 threads | 1.2 ms |
+
+Reading one 2300² PCK frame (mar345), end to end:
+
+| | per frame |
+|---|---|
+| FabIO, with its Cython PCK decoder | 612 ms |
+| Fabio.jl | 38 ms |
+
+The PCK comparison is the fairer of the two, since here FabIO is compiled rather than
+interpreted.
 
 The threaded path uses the per-row offset table stored at the end of every AGI blob. FabIO
 reads that table and discards it (`# read data components (row indices are ignored)`), which
@@ -110,8 +126,9 @@ A full pass over 140 real files (2048², ~3.2 MB each) takes **0.99 s**.
 
 The CBF reader and writer are checked against the Python FabIO in both directions: FabIO reads
 a CBF written here, and this package reads a CBF written by FabIO, with the arrays identical in
-each case. The Esperanto reader is checked against reference statistics produced by FabIO from
-real detector files.
+each case. The Esperanto and mar345 readers are checked against reference statistics — minimum,
+maximum, sum, mean, standard deviation and individual pixel values — produced by FabIO from real
+detector files.
 
 ## Licence
 

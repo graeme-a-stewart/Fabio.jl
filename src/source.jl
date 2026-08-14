@@ -150,3 +150,33 @@ end
 Wrap an in-memory buffer, e.g. bytes received over a network.
 """
 opensource(buf::Vector{UInt8}) = BufferSource(buf, nothing)
+
+# --------------------------------------------------------------- byte scanning
+
+"""Byte at 0-based `offset`. No bounds check: callers have already sized the read."""
+@inline _byteat(src::AbstractSource, offset::Integer) = @inbounds src.buf[Int(offset)+1]
+
+"""Find `needle` in `src` at or after 0-based `from`; return the 0-based offset or `nothing`."""
+function _findbytes(src::AbstractSource, needle::AbstractVector{UInt8}, from::Integer = 0)
+    n = filesize(src)
+    m = length(needle)
+    m == 0 && return Int(from)
+    buf = src.buf
+    first = needle[1]
+    i = Int(from) + 1
+    stop = n - m + 1
+    @inbounds while i <= stop
+        if buf[i] == first
+            ok = true
+            for j = 2:m
+                if buf[i+j-1] != needle[j]
+                    ok = false
+                    break
+                end
+            end
+            ok && return i - 1
+        end
+        i += 1
+    end
+    return nothing
+end

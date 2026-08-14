@@ -69,6 +69,7 @@ include("source.jl")
 include("codecs.jl")
 include("agi.jl")
 include("byteoffset.jl")
+include("pck.jl")
 include("blob.jl")
 include("registry.jl")
 include("detect.jl")
@@ -78,9 +79,10 @@ include("api.jl")
 include("formats/cbf.jl")
 include("formats/edf.jl")
 include("formats/esperanto.jl")
+include("formats/mar345.jl")
 include("formats/npy.jl")
 
-export CBF, EDF, Esperanto, NPY
+export CBF, EDF, Esperanto, Mar345, NPY
 
 """
     registerdefaults!()
@@ -106,6 +108,17 @@ function registerdefaults!()
         description = "CIF Binary Format (Pilatus and others)",
         extensions = ["cbf"],
         magic = [Magic("###CBF: VERSION"), Magic("###CBF:")],
+        writer = false,
+    )
+    register!(
+        Mar345();
+        name = :mar345,
+        description = "MAR Research image plate (mar345/mar300)",
+        # The 4-byte 1234 marker, little- and big-endian. FabIO also lists two-byte
+        # variants, but those are short enough to collide with unrelated formats.
+        magic = [Magic(UInt8[0xD2, 0x04, 0x00, 0x00]), Magic(UInt8[0x00, 0x00, 0x04, 0xD2])],
+        extensions = ["mar345", "mar3450", "mar3000", "mar2400", "mar2300",
+                      "mar2000", "mar1800", "mar1600", "mar1200"],
         writer = false,
     )
     register!(

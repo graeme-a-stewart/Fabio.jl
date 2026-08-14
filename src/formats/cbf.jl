@@ -42,31 +42,6 @@ const CBF_DATA_TYPES = Dict{String,DataType}(
 
 const CBF_TYPE_NAMES = Dict{DataType,String}(v => k for (k, v) in CBF_DATA_TYPES)
 
-"""Find `needle` in `src` at or after 0-based `from`; return the 0-based offset or `nothing`."""
-function _findbytes(src::AbstractSource, needle::AbstractVector{UInt8}, from::Integer = 0)
-    n = filesize(src)
-    m = length(needle)
-    m == 0 && return Int(from)
-    buf = src.buf
-    first = needle[1]
-    i = Int(from) + 1
-    stop = n - m + 1
-    @inbounds while i <= stop
-        if buf[i] == first
-            ok = true
-            for j = 2:m
-                if buf[i+j-1] != needle[j]
-                    ok = false
-                    break
-                end
-            end
-            ok && return i - 1
-        end
-        i += 1
-    end
-    return nothing
-end
-
 function scan(::CBF, src::AbstractSource)
     starter = _findbytes(src, CBF_STARTER)
     starter === nothing &&

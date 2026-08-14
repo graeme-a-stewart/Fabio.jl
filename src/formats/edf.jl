@@ -55,8 +55,6 @@ const EDF_TYPE_NAMES = Dict{DataType,String}(
     Float64 => "DoubleValue",
 )
 
-@inline _byteat(src::AbstractSource, offset::Integer) = @inbounds src.buf[Int(offset)+1]
-
 const _EDF_SPACE = (0x20, 0x0A, 0x0D, 0x09, 0x00)
 
 """
