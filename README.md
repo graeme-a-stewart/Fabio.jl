@@ -105,3 +105,11 @@ validated before use, and makes region-of-interest reads possible without decodi
 frame.
 
 A full pass over 140 real files (2048², ~3.2 MB each) takes **0.99 s**.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Copyright 2026 Graeme Andrew Stewart and Deutsches
+Elektronen-Synchrotron (DESY).
+
+The Python [FabIO](https://github.com/silx-kit/fabio) library, whose formats and reference test
+values this package follows, is also MIT-licensed, © European Synchrotron Radiation Facility.
