@@ -5,8 +5,8 @@ Reading of 2D detector images and their metadata, after the Python
 format, handles compression, and hands back the pixels as a Julia array of the type actually
 stored in the file, alongside the header.
 
-**Status: Phase 0.** The core architecture is complete and the EDF, Esperanto and NumPy
-readers are working. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+**Status: Phase 1 in progress.** The core architecture is complete; EDF, CBF, Esperanto and
+NumPy readers are working. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -30,8 +30,8 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: EDF, Esperanto, NumPy `.npy` | `src/formats/` |
-| Codecs: raw, zlib blob, AGI bitfield | `src/codecs.jl`, `src/agi.jl` |
+| Formats: CBF, EDF, Esperanto, NumPy `.npy` | `src/formats/` |
+| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
 | Blob decoding, byte order, orientation | `src/blob.jl` |
@@ -105,6 +105,13 @@ validated before use, and makes region-of-interest reads possible without decodi
 frame.
 
 A full pass over 140 real files (2048², ~3.2 MB each) takes **0.99 s**.
+
+## Interoperability
+
+The CBF reader and writer are checked against the Python FabIO in both directions: FabIO reads
+a CBF written here, and this package reads a CBF written by FabIO, with the arrays identical in
+each case. The Esperanto reader is checked against reference statistics produced by FabIO from
+real detector files.
 
 ## Licence
 

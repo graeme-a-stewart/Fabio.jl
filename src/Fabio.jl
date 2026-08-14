@@ -68,17 +68,19 @@ include("frame.jl")
 include("source.jl")
 include("codecs.jl")
 include("agi.jl")
+include("byteoffset.jl")
 include("blob.jl")
 include("registry.jl")
 include("detect.jl")
 include("file.jl")
 include("api.jl")
 
+include("formats/cbf.jl")
 include("formats/edf.jl")
 include("formats/esperanto.jl")
 include("formats/npy.jl")
 
-export EDF, Esperanto, NPY
+export CBF, EDF, Esperanto, NPY
 
 """
     registerdefaults!()
@@ -96,6 +98,14 @@ function registerdefaults!()
         description = "CrysAlis Pro Esperanto",
         extensions = ["esperanto", "esper"],
         magic = [Magic("ESPERANTO FORMAT")],
+        writer = false,
+    )
+    register!(
+        CBF();
+        name = :cbf,
+        description = "CIF Binary Format (Pilatus and others)",
+        extensions = ["cbf"],
+        magic = [Magic("###CBF: VERSION"), Magic("###CBF:")],
         writer = false,
     )
     register!(

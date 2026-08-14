@@ -99,8 +99,10 @@ function mmapblob(src::AbstractSource, layout::BinaryLayout{T}) where {T}
 end
 
 _fixbyteorder!(A, bo::ByteOrder, ::AbstractDataCodec) = _fixbyteorder!(A, bo)
-# Codecs that produce host-order integers by construction need no swap.
+# Codecs that produce host-order integers by construction need no swap; for those the
+# stored element byte order describes the escapes, which they have already handled.
 _fixbyteorder!(A, ::ByteOrder, ::AGIBitfield) = A
+_fixbyteorder!(A, ::ByteOrder, ::ByteOffset) = A
 
 function _fixbyteorder!(A::Array{T}, bo::ByteOrder) where {T}
     (isnative(bo) || sizeof(T) == 1) && return A

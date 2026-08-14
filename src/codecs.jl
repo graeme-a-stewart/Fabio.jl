@@ -79,3 +79,13 @@ end
 
 @inline _load_i16(raw::AbstractVector{UInt8}, p::Int) = reinterpret(Int16, _load_u16(raw, p))
 @inline _load_i32(raw::AbstractVector{UInt8}, p::Int) = reinterpret(Int32, _load_u32(raw, p))
+
+@inline function _load_u64(raw::AbstractVector{UInt8}, p::Int)
+    w = UInt64(0)
+    @inbounds for i = 0:7
+        w |= UInt64(raw[p+i]) << (8 * i)
+    end
+    return w
+end
+
+@inline _load_i64(raw::AbstractVector{UInt8}, p::Int) = reinterpret(Int64, _load_u64(raw, p))
