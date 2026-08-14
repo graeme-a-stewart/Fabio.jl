@@ -81,8 +81,9 @@ include("formats/edf.jl")
 include("formats/esperanto.jl")
 include("formats/mar345.jl")
 include("formats/npy.jl")
+include("formats/tiff.jl")
 
-export CBF, EDF, Esperanto, Mar345, NPY
+export CBF, EDF, Esperanto, Mar345, NPY, TIFFLike
 
 """
     registerdefaults!()
@@ -119,6 +120,31 @@ function registerdefaults!()
         magic = [Magic(UInt8[0xD2, 0x04, 0x00, 0x00]), Magic(UInt8[0x00, 0x00, 0x04, 0xD2])],
         extensions = ["mar345", "mar3450", "mar3000", "mar2400", "mar2300",
                       "mar2000", "mar1800", "mar1600", "mar1200"],
+        writer = false,
+    )
+    # The TIFF family. Pilatus is caught by its own longer signature — its first IFD sits at
+    # byte 0x82 — while MarCCD has no distinct magic and is resolved by `refine`.
+    register!(
+        TIFFLike{:pilatus}();
+        name = :pilatus,
+        description = "Dectris Pilatus (TIFF with a text header)",
+        extensions = ["tif", "tiff"],
+        magic = [Magic(UInt8[0x49, 0x49, 0x2A, 0x00, 0x82, 0x00])],
+        writer = false,
+    )
+    register!(
+        TIFFLike{:marccd}();
+        name = :marccd,
+        description = "MarCCD / Mar165 (TIFF with a binary header)",
+        extensions = ["mccd"],
+        writer = false,
+    )
+    register!(
+        TIFFLike{:plain}();
+        name = :tiff,
+        description = "Tagged Image File Format (baseline, uncompressed)",
+        extensions = ["tif", "tiff"],
+        magic = [Magic(TIFF_LE), Magic(TIFF_BE)],
         writer = false,
     )
     register!(

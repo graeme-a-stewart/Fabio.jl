@@ -132,7 +132,18 @@ end
 override this; everything else inherits the default below, which drives the frame's
 [`BinaryLayout`](@ref) through [`readblob`](@ref).
 """
-function readframe(f::ImageFile, i::Int)
+readframe(f::ImageFile, i::Int) = readframe_layout(f, i)
+
+"""
+    readframe_layout(file, i) -> ImageFrame
+
+The tier-1 frame reader: drive the frame's [`BinaryLayout`](@ref) through [`readblob`](@ref).
+
+This is the default [`readframe`](@ref). It is public so that a tier-2 format can fall back to
+it for the frames it *can* describe as a layout, and take over only for the ones it cannot —
+TIFF does exactly that, handling contiguous images here and gathering multi-strip ones itself.
+"""
+function readframe_layout(f::ImageFile, i::Int)
     spec = f.frames[i]
     layout = spec.layout
     layout === nothing && throw(
