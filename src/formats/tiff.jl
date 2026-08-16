@@ -379,8 +379,10 @@ const MARCCD_FIELDS = (
     (132, "over_8_bits", 1.0),
     (136, "over_16_bits", 1.0),
     (640, "xtal_to_detector", 1e-3),        # mm
-    (644, "beam_x", 1e-3),                  # pixels
-    (648, "beam_y", 1e-3),                  # pixels
+    # The C header calls these pixels, but real files store millimetres: dividing by
+    # pixelsize puts the beam at the centre of the detector, which pixels would not.
+    (644, "beam_x", 1e-3),
+    (648, "beam_y", 1e-3),
     (652, "integration_time", 1e-3),        # s
     (656, "exposure_time", 1e-3),           # s
     (660, "readout_time", 1e-3),            # s
@@ -558,4 +560,64 @@ function writetiff(
         Base.write(f, take!(io))
     end
     return path
+end
+
+
+"""
+    writemarccd(path, A, header = Header())
+
+Write a MarCCD file: a baseline TIFF whose pixels begin at 4096, with the 3072-byte binary
+header spliced in at offset 1024.
+
+Values for the fields in [`MARCCD_FIELDS`](@ref) are taken from `header` when present, in the
+same physical units the reader reports, and written back at the scale the format stores. Fields
+absent from `header` are left zero, which is what a MarCCD header uses for "not recorded".
+`nfast`, `nslow` and `depth` always come from the array itself, so they cannot disagree with
+the TIFF tags.
+
+MarCCD stores unsigned 16-bit counts; [`coerce`](@ref) converts anything else.
+"""
+function writemarccd(path::AbstractString, A::AbstractArray{<:Any,2}, header::Header = Header())
+    B = coerce(TIFFLike{:marccd}(), A)
+    writetiff(path, B; mindataoffset = MARCCD_HEADER_OFFSET + 3072)
+
+    hdr = zeros(UInt8, 3072)
+    put32(off::Int, v::Integer) =
+        (hdr[(off+1):(off+4)] = reinterpret(UInt8, [htol(Int32(v))]); nothing)
+    # header_name, the "MMX" tag `refine` looks for.
+    hdr[5:7] = Vector{UInt8}(codeunits("MMX"))
+    put32(0, 1)                                    # header_type
+    put32(20, 1)                                   # header_major_version
+    put32(36, 3072)                                # header_size
+    put32(76, 1)                                   # nheaders
+    put32(80, size(B, 1))                          # nfast
+    put32(84, size(B, 2))                          # nslow
+    put32(88, sizeof(eltype(B)))                   # depth
+    put32(92, size(B, 1))                          # record_length
+    put32(96, 8 * sizeof(eltype(B)))               # signif_bits
+
+    for (off, name, scale) in MARCCD_FIELDS
+        name in ("nfast", "nslow", "depth") && continue
+        v = getci(header, name)
+        v === nothing && continue
+        num = _convert_header(Float64, v)
+        num === nothing && continue
+        put32(off, round(Int, num / scale))
+    end
+
+    raw = read(path)
+    raw[(MARCCD_HEADER_OFFSET+1):(MARCCD_HEADER_OFFSET+3072)] = hdr
+    Base.open(path, "w") do f
+        Base.write(f, raw)
+    end
+    return path
+end
+
+"MarCCD stores unsigned 16-bit counts."
+function coerce(::TIFFLike{:marccd}, A::AbstractArray{T,2}) where {T}
+    T === UInt16 && return A
+    B = T <: Integer ? A : (@info "MarCCD stores integers; rounding"; round.(A))
+    any(x -> x < 0 || x > 65535, B) &&
+        @warn "MarCCD is 16-bit unsigned; values outside 0:65535 will wrap"
+    return convert(Array{UInt16}, B .% UInt16)
 end

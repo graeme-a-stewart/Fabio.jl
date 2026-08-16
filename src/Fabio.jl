@@ -156,7 +156,7 @@ function registerdefaults!()
         name = :marccd,
         description = "MarCCD / Mar165 (TIFF with a binary header)",
         extensions = ["mccd"],
-        writer = false,
+        writer = true,
     )
     register!(
         TIFFLike{:plain}();
