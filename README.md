@@ -5,8 +5,8 @@ Reading of 2D detector images and their metadata, after the Python
 format, handles compression, and hands back the pixels as a Julia array of the type actually
 stored in the file, alongside the header.
 
-**Status: Phase 1 complete.** The core architecture is complete, and readers exist for Bruker,
-CBF, d\*TREK/ADSC, EDF, Esperanto, mar345, TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+**Status: Phase 2 in progress.** Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC,
+EDF, Esperanto, GE, mar345, MRC, Netpbm, TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -30,8 +30,8 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: Bruker (86 and 100), CBF, d\*TREK/ADSC, EDF, Esperanto, mar345, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
-| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl` |
+| Formats: Bruker (86, 100), CBF, d\*TREK/ADSC, EDF, Esperanto, GE, mar345, MRC, Netpbm, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
+| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Netpbm ASCII and packed bits | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/pnm.jl` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
 | Blob decoding, byte order, orientation | `src/blob.jl` |

@@ -80,12 +80,15 @@ include("formats/bruker.jl")
 include("formats/cbf.jl")
 include("formats/dtrek.jl")
 include("formats/edf.jl")
+include("formats/ge.jl")
 include("formats/esperanto.jl")
 include("formats/mar345.jl")
+include("formats/mrc.jl")
+include("formats/pnm.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, Dtrek, EDF, Esperanto, Mar345, NPY, TIFFLike
+export Bruker, CBF, Dtrek, EDF, Esperanto, GE, Mar345, MRC, NPY, PNM, TIFFLike
 
 """
     registerdefaults!()
@@ -171,6 +174,36 @@ function registerdefaults!()
         description = "Tagged Image File Format (baseline, uncompressed)",
         extensions = ["tif", "tiff"],
         magic = [Magic(TIFF_LE), Magic(TIFF_BE)],
+        writer = false,
+    )
+    register!(
+        MRC();
+        name = :mrc,
+        description = "MRC / CCP4 map (multi-frame)",
+        extensions = ["mrc", "map", "fei"],
+        magic = [Magic("MAP ", 208), Magic("MAP\0", 208)],
+        writer = false,
+    )
+    register!(
+        PNM();
+        name = :pnm,
+        description = "Netpbm greyscale and bitmap (P1, P2, P4, P5)",
+        extensions = ["pnm", "pgm", "pbm"],
+        magic = [Magic("P1"), Magic("P2"), Magic("P4"), Magic("P5")],
+        writer = false,
+    )
+    register!(
+        GE();
+        name = :ge,
+        description = "General Electric detector (multi-frame)",
+        # FabIO matches an extension of "ge" followed by any digits; the registry does exact
+        # matches, so the ones that occur in practice are listed.
+        extensions = ["ge", "ge1", "ge2", "ge3", "ge4", "ge5"],
+        # A firmware update at APS began writing the header as zeros, so a run of ten zero
+        # bytes is the signature of a blanked GE file. It is given the lowest priority in the
+        # table, below even EDF's bare brace, since it is the least selective signature here.
+        magic = [Magic("ADEPT"), Magic(zeros(UInt8, 10))],
+        priority = -2,
         writer = false,
     )
     register!(
