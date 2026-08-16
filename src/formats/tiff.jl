@@ -43,6 +43,7 @@ const TIFF_STRIP_OFFSETS = 273
 const TIFF_SAMPLES_PER_PIXEL = 277
 const TIFF_ROWS_PER_STRIP = 278
 const TIFF_STRIP_BYTE_COUNTS = 279
+const TIFF_TILE_OFFSETS = 324
 const TIFF_SAMPLE_FORMAT = 339
 
 """Byte width of each TIFF field type, indexed by the type code."""
@@ -180,7 +181,12 @@ function scan(fmt::TIFFLike, src::AbstractSource)
 
         T = _tiff_eltype(_tag(ifd, TIFF_BITS_PER_SAMPLE, 8), _tag(ifd, TIFF_SAMPLE_FORMAT, 1))
         offsets = get(ifd.tags, TIFF_STRIP_OFFSETS, Int64[])
-        isempty(offsets) && throw(CorruptFileError("TIFF: no StripOffsets"))
+        if isempty(offsets)
+            haskey(ifd.tags, TIFF_TILE_OFFSETS) && throw(
+                UnsupportedFormatError("tiled TIFF is not supported yet (only stripped images)"),
+            )
+            throw(CorruptFileError("TIFF: no StripOffsets"))
+        end
         counts = get(ifd.tags, TIFF_STRIP_BYTE_COUNTS, Int64[])
         if length(counts) != length(offsets)
             rows = _tag(ifd, TIFF_ROWS_PER_STRIP, height)
