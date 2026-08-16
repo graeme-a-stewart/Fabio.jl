@@ -89,6 +89,7 @@ FABIO_JL_MAR345_TESTDATA=/path/to/mar2300/files \
 FABIO_JL_PILATUS_TESTDATA=/path/to/pilatus/tiffs \
 FABIO_JL_MARCCD_TESTDATA=/path/to/mccd/files \
 FABIO_JL_SFRM_TESTDATA=/path/to/sfrm/files \
+FABIO_JL_ADSC_TESTDATA=/path/to/adsc/img/files \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
