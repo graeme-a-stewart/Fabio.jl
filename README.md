@@ -30,7 +30,7 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: Bruker, CBF, d\*TREK/ADSC, EDF, Esperanto, mar345, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
+| Formats: Bruker (86 and 100), CBF, d\*TREK/ADSC, EDF, Esperanto, mar345, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
 | Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
@@ -88,6 +88,7 @@ FABIO_JL_LOCAL_TESTDATA=/path/to/esperanto/files \
 FABIO_JL_MAR345_TESTDATA=/path/to/mar2300/files \
 FABIO_JL_PILATUS_TESTDATA=/path/to/pilatus/tiffs \
 FABIO_JL_MARCCD_TESTDATA=/path/to/mccd/files \
+FABIO_JL_SFRM_TESTDATA=/path/to/sfrm/files \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 

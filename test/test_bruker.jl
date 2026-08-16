@@ -1,4 +1,47 @@
-using Fabio: writebruker, BrukerBlob
+using Fabio: writebruker, BrukerBlob, Bruker100Blob
+
+"""
+Write a FORMAT:100 fixture: header, narrow pixels, then the padded underflow, overflow1 and
+overflow2 tables in that order. Mirrors the layout `Bruker100Blob` documents.
+"""
+function write_bruker100(path, A::Matrix{UInt8}; underflow = Int[], overflow1 = UInt16[],
+                         overflow2 = Int32[], baseline = 0, hdrblks = 5, ubpp = 1)
+    cols, rows = size(A)
+    nov0 = isempty(underflow) ? -1 : length(underflow)
+    lines = [
+        rpad(rpad("FORMAT",7)*":100", 80),
+        rpad(rpad("HDRBLKS",7)*":"*string(hdrblks), 80),
+        rpad(rpad("NROWS",7)*":"*string(rows), 80),
+        rpad(rpad("NCOLS",7)*":"*string(cols), 80),
+        rpad(rpad("NPIXELB",7)*":1   "*string(ubpp), 80),
+        rpad(rpad("NOVERFL",7)*":"*join((nov0, length(overflow1), length(overflow2)), "   "), 80),
+        rpad(rpad("NEXP",7)*":1  0  "*string(baseline)*"  0  0", 80),
+    ]
+    body = join(lines)
+    total = hdrblks * 512
+    pad16(v) = 16 * cld(v, 16)
+    Base.open(path, "w") do f
+        write(f, codeunits(rpad(body, total)))
+        write(f, vec(A))
+        for (vals, bpp, conv) in ((underflow, ubpp, x -> x), (overflow1, 2, x -> x), (overflow2, 4, x -> x))
+            isempty(vals) && continue
+            raw = UInt8[]
+            for v in vals
+                u = bpp == 1 ? UInt8(v % UInt8) : bpp == 2 ? nothing : nothing
+                if bpp == 1
+                    push!(raw, reinterpret(UInt8, Int8(v)))
+                elseif bpp == 2
+                    append!(raw, reinterpret(UInt8, [htol(UInt16(v))]))
+                else
+                    append!(raw, reinterpret(UInt8, [htol(Int32(v))]))
+                end
+            end
+            append!(raw, zeros(UInt8, pad16(length(raw)) - length(raw)))
+            write(f, raw)
+        end
+    end
+    return path
+end
 
 @testset "Bruker" begin
     @testset "round-trip at each pixel width" begin
@@ -93,25 +136,56 @@ using Fabio: writebruker, BrukerBlob
         @test collect(frame) == A
     end
 
-    @testset "FORMAT:100 is refused rather than misread" begin
-        # A 100-format file keeps its overflows, underflows and baseline in three separate
-        # padded blocks. Reading it as 86 would give plausible-looking wrong pixels, so the
-        # reader has to refuse it explicitly.
-        A = UInt16[1 2; 3 4]
+    @testset "FORMAT:100 is detected by refine, not by magic" begin
+        A = UInt8[1 2; 3 4]
         p = joinpath(TMP, "v100.sfrm")
-        writebruker(p, A)
-        raw = read(p)
-        raw[1:80] = Vector{UInt8}(codeunits(rpad(rpad("FORMAT", 7) * ":100", 80)))
-        q = joinpath(TMP, "v100b.sfrm")
-        write(q, raw)
-        err = try
-            Fabio.openimage(q)
-            nothing
-        catch e
-            e
-        end
-        @test err isa Fabio.UnsupportedFormatError
-        @test occursin("FORMAT:100", sprint(showerror, err))
+        write_bruker100(p, A)
+        @test Fabio.openimage(f -> Fabio.imageformat(f), p) isa Fabio.Bruker{100}
+        @test collect(Fabio.readimage(p)) == Int32[1 2; 3 4]
+    end
+
+    @testset "FORMAT:100 overflow escalates in two stages" begin
+        # A pixel reading 255 takes the next overflow1 value; if that value is 65535 it then
+        # takes the next overflow2 value. Order matters, so the second stage must see the
+        # result of the first.
+        A = UInt8[255 1; 2 255]                       # two pixels at the marker
+        p = joinpath(TMP, "v100_ov.sfrm")
+        write_bruker100(p, A; overflow1 = UInt16[1000, 65535], overflow2 = Int32[123456])
+        d = collect(Fabio.readimage(p))
+        @test eltype(d) === Int32
+        # Flat order is column-major: A[1,1]=255, A[2,1]=2, A[1,2]=1, A[2,2]=255.
+        @test d[1] == 1000                            # first marker -> first overflow1
+        @test d[2] == 2
+        @test d[3] == 1
+        @test d[4] == 123456                          # second marker -> 65535 -> overflow2
+    end
+
+    @testset "FORMAT:100 underflow and baseline" begin
+        # With an underflow table present, zero pixels take its values and every other pixel
+        # gains the baseline from NEXP.
+        A = UInt8[0 5; 7 0]
+        p = joinpath(TMP, "v100_un.sfrm")
+        write_bruker100(p, A; underflow = Int[-3, -9], baseline = 64)
+        d = collect(Fabio.readimage(p))
+        @test d[1] == -3                              # first zero
+        @test d[2] == 7 + 64
+        @test d[3] == 5 + 64
+        @test d[4] == -9                              # second zero
+    end
+
+    @testset "FORMAT:100 without an underflow table adds the baseline everywhere" begin
+        A = UInt8[0 5; 7 0]
+        p = joinpath(TMP, "v100_nb.sfrm")
+        write_bruker100(p, A; baseline = 64)          # NOVERFL starts -1, so baseline is 0
+        d = collect(Fabio.readimage(p))
+        @test d == Int32[0 5; 7 0]
+    end
+
+    @testset "FORMAT:100 tables that run short are refused" begin
+        A = UInt8[255 255; 255 255]
+        p = joinpath(TMP, "v100_short.sfrm")
+        write_bruker100(p, A; overflow1 = UInt16[1, 2])   # four markers, two entries
+        @test_throws Fabio.CorruptFileError Fabio.readimage(p)
     end
 
     @testset "detected by magic" begin

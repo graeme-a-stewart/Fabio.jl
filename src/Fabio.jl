@@ -123,11 +123,18 @@ function registerdefaults!()
         writer = false,
     )
     register!(
-        Bruker();
+        Bruker{86}();
         name = :bruker,
         description = "Bruker area detector (FORMAT:86)",
         extensions = ["sfrm"],
         magic = [Magic("FORMAT :")],
+        writer = false,
+    )
+    register!(
+        Bruker{100}();
+        name = :bruker100,
+        description = "Bruker area detector (FORMAT:100)",
+        extensions = ["sfrm"],
         writer = false,
     )
     register!(

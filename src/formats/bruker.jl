@@ -1,7 +1,9 @@
 """
-    Bruker <: ImageFormat
+    Bruker{Version} <: ImageFormat
 
-Bruker `FORMAT:86` frames, as written by Bruker area detectors (`.sfrm` and friends).
+Bruker area-detector frames (`.sfrm`): `Bruker{86}` and `Bruker{100}`. Both share the header
+format and differ only in how the pixels are stored, so [`refine`](@ref) reads the `FORMAT` key
+and picks the version at detection time.
 
 # On-disk structure
 
@@ -18,10 +20,10 @@ A key that appears on several lines has its values joined with newlines, matchin
 records and patched in afterwards — the same shape of problem as mar345's overflow table, and
 handled the same way, by giving the codec the table the scan already read.
 
-`FORMAT:100` files are a different layout — three separate overflow, underflow and baseline
-blocks — and are refused rather than misread by this reader.
+`FORMAT:100` keeps its counts in a narrow base image plus up to three padded correction
+tables; see [`Bruker100Blob`](@ref).
 """
-struct Bruker <: ImageFormat end
+struct Bruker{Version} <: ImageFormat end
 
 const BRUKER_LINE = 80
 const BRUKER_BLOCK = 512
@@ -80,7 +82,7 @@ end
 end
 @inline _bruker_value(::Type{T}, v, ::BrukerBlob) where {T<:Integer} = T(v)
 
-function scan(::Bruker, src::AbstractSource)
+function scan(fmt::Bruker, src::AbstractSource)
     n = filesize(src)
     n < BRUKER_MIN_BLOCKS * BRUKER_BLOCK &&
         throw(TruncatedFileError("Bruker: file is shorter than the minimum five header blocks"))
@@ -100,13 +102,8 @@ function scan(::Bruker, src::AbstractSource)
     h["datastart"] = headerbytes
 
     version = getheader(h, "FORMAT", Int, 86)
-    version == 86 || throw(
-        UnsupportedFormatError(
-            "Bruker FORMAT:$version is not supported; only FORMAT:86 is. A 100-format file " *
-            "stores its overflows, underflows and baseline in three separate padded blocks, " *
-            "so reading it as 86 would silently give wrong pixel values.",
-        ),
-    )
+    version in (86, 100) ||
+        throw(UnsupportedFormatError("Bruker FORMAT:$version is not supported"))
 
     rows = _bruker_int(h, "NROWS")
     cols = _bruker_int(h, "NCOLS")
@@ -122,6 +119,13 @@ function scan(::Bruker, src::AbstractSource)
     databytes = rows * cols * npixelb
     headerbytes + databytes > n &&
         throw(TruncatedFileError("Bruker: needs $databytes bytes of pixels, file holds $n"))
+
+    if version == 100
+        codec = _bruker100_codec(h, src, headerbytes + databytes, npixelb, n)
+        layout = BinaryLayout{Int32}(
+            headerbytes, databytes, dims; byteorder = LittleEndian(), codec = codec)
+        return Header(), FrameSpec[FrameSpec(h, layout)]
+    end
 
     nover = _bruker_int(h, "NOVERFL", 0)
     oidx, oval = _bruker_overflow(src, headerbytes + databytes, nover, n)
@@ -144,6 +148,24 @@ function scan(::Bruker, src::AbstractSource)
         codec = codec,
     )
     return Header(), FrameSpec[FrameSpec(h, layout)]
+end
+
+"""
+    refine(::Bruker{86}, head, path, src)
+
+Both versions open with the same `FORMAT :` line, so the version is read from the header rather
+than guessed from a magic number.
+"""
+function refine(
+    ::Bruker{86},
+    ::AbstractVector{UInt8},
+    ::Union{Nothing,AbstractString},
+    src::AbstractSource,
+)
+    filesize(src) < BRUKER_MIN_BLOCKS * BRUKER_BLOCK && return Bruker{86}()
+    h = Header()
+    _bruker_parse!(h, src, 0, BRUKER_MIN_BLOCKS * BRUKER_BLOCK)
+    return getheader(h, "FORMAT", Int, 86) == 100 ? Bruker{100}() : Bruker{86}()
 end
 
 # The codec has already put the values in host order.
@@ -264,3 +286,190 @@ end
 
 _bruker_line(key::AbstractString, value::AbstractString) =
     rpad(rpad(uppercase(key), 7) * ":" * value, BRUKER_LINE)
+
+# ------------------------------------------------------------------ FORMAT:100 pixels
+
+"""
+    Bruker100Blob(bytesperpixel, underflow, overflow1, overflow2, baseline, has_underflow)
+
+Bruker `FORMAT:100` pixel encoding: a narrow base image plus up to three correction tables,
+each padded to a multiple of 16 bytes and stored immediately after the pixels.
+
+    <pixels>     NROWS x NCOLS of NPIXELB[1] bytes
+    <underflow>  NOVERFL[1] signed values of NPIXELB[2] bytes   (absent when NOVERFL[1] < 1)
+    <overflow1>  NOVERFL[2] UInt16 values
+    <overflow2>  NOVERFL[3] Int32 values
+
+Reconstruction escalates in two stages, and the order matters: every pixel reading 255 takes
+the next value from `overflow1`, and only then does every pixel reading 65535 — including one
+that just came from `overflow1` — take the next value from `overflow2`. Pixels reading zero
+afterwards take the next `underflow` value, and every other pixel has the baseline added.
+The tables are consumed in raster order, which is this array's memory order.
+
+The baseline is the third `NEXP` field, or zero when `NOVERFL` begins with -1, which means the
+file carries neither underflow table nor baseline.
+"""
+struct Bruker100Blob <: AbstractDataCodec
+    bytesperpixel::Int
+    underflow::Vector{Int32}
+    overflow1::Vector{UInt16}
+    overflow2::Vector{Int32}
+    baseline::Int32
+    has_underflow::Bool
+end
+
+"""Round `v` up to a multiple of 16, the padding every FORMAT:100 table uses."""
+_bruker_pad16(v::Integer) = 16 * cld(Int(v), 16)
+
+function _bruker100_codec(
+    h::Header,
+    src::AbstractSource,
+    offset::Int,
+    npixelb::Int,
+    filesz::Int,
+)
+    nov = _bruker_ints(h, "NOVERFL", 3)
+    ubpp = _bruker_int_at(h, "NPIXELB", 2, npixelb)
+
+    pos = offset
+    underflow = Int32[]
+    has_underflow = nov[1] > 0
+    if has_underflow
+        underflow, pos = _bruker100_table(src, pos, nov[1], ubpp, true, filesz)
+    end
+    overflow1 = UInt16[]
+    if nov[2] > 0
+        raw, pos = _bruker100_table(src, pos, nov[2], 2, false, filesz)
+        overflow1 = UInt16.(raw)
+    end
+    overflow2 = Int32[]
+    if nov[3] > 0
+        overflow2, pos = _bruker100_table(src, pos, nov[3], 4, true, filesz)
+    end
+
+    # -1 means the file carries neither underflow table nor baseline.
+    baseline = nov[1] == -1 ? Int32(0) : Int32(_bruker_int_at(h, "NEXP", 3, 0))
+    return Bruker100Blob(npixelb, underflow, overflow1, overflow2, baseline, has_underflow)
+end
+
+"""Read one padded correction table, returning its values and the position after the padding."""
+function _bruker100_table(
+    src::AbstractSource,
+    pos::Int,
+    count::Int,
+    bpp::Int,
+    signed::Bool,
+    filesz::Int,
+)
+    need = count * bpp
+    padded = _bruker_pad16(need)
+    pos + padded > filesz && throw(
+        TruncatedFileError(
+            "Bruker100: a $count-entry table of $bpp-byte values needs $padded bytes at $pos, " *
+            "but the file holds $filesz",
+        ),
+    )
+    raw = bytes(src, pos, need)
+    out = Vector{Int32}(undef, count)
+    @inbounds for i = 1:count
+        p = (i - 1) * bpp + 1
+        out[i] = if bpp == 1
+            signed ? Int32(reinterpret(Int8, raw[p])) : Int32(raw[p])
+        elseif bpp == 2
+            signed ? Int32(_load_i16(raw, p)) : Int32(_load_u16(raw, p))
+        else
+            _load_i32(raw, p)
+        end
+    end
+    return out, pos + padded
+end
+
+function decode(c::Bruker100Blob, raw::AbstractVector{UInt8}, ::Type{Int32}, dims::Dims{2})
+    S = get(BRUKER_BPP_TYPES, c.bytesperpixel, nothing)
+    S === nothing &&
+        throw(UnsupportedFormatError("Bruker100: NPIXELB=$(c.bytesperpixel) is not 1, 2 or 4"))
+    return _bruker100_decode(c, raw, dims, S)
+end
+
+function _bruker100_decode(
+    c::Bruker100Blob,
+    raw::AbstractVector{UInt8},
+    dims::Dims{2},
+    ::Type{S},
+) where {S}
+    stored = decode(RawBlob(), raw, S, dims)
+    isnative(LittleEndian()) || _fixbyteorder!(stored, LittleEndian())
+    out = Array{Int32}(undef, dims)
+    @inbounds for i in eachindex(out)
+        out[i] = Int32(stored[i])
+    end
+
+    if sizeof(S) == 1 && !isempty(c.overflow1)
+        _bruker100_patch!(out, Int32(255), c.overflow1, "overflow1")
+    end
+    if sizeof(S) < 4 && !isempty(c.overflow2)
+        _bruker100_patch!(out, Int32(65535), c.overflow2, "overflow2")
+    end
+
+    if !c.has_underflow
+        @inbounds for i in eachindex(out)
+            out[i] += c.baseline
+        end
+    else
+        k = 0
+        n = length(c.underflow)
+        @inbounds for i in eachindex(out)
+            if out[i] == 0
+                k += 1
+                k <= n || throw(
+                    CorruptFileError("Bruker100: more zero pixels than the $n underflow entries"),
+                )
+                out[i] = c.underflow[k]
+            else
+                out[i] += c.baseline
+            end
+        end
+    end
+    return out
+end
+
+"""Replace each pixel equal to `marker` with the next table entry, in raster order."""
+function _bruker100_patch!(out::Array{Int32}, marker::Int32, table, what::AbstractString)
+    k = 0
+    n = length(table)
+    @inbounds for i in eachindex(out)
+        if out[i] == marker
+            k += 1
+            k <= n || throw(
+                CorruptFileError("Bruker100: more pixels at $marker than the $n $what entries"),
+            )
+            out[i] = Int32(table[k])
+        end
+    end
+    return out
+end
+
+_fixbyteorder!(A, ::ByteOrder, ::Bruker100Blob) = A
+
+"""All whitespace-separated integers of a header value, padded with zeros to `n` entries."""
+function _bruker_ints(h::Header, key::AbstractString, n::Int)
+    out = zeros(Int, n)
+    v = getci(h, key)
+    v === nothing && return out
+    for (i, tok) in enumerate(split(strip(String(v))))
+        i > n && break
+        p = tryparse(Int, tok)
+        p === nothing || (out[i] = p)
+    end
+    return out
+end
+
+"""The `i`-th whitespace-separated integer of a header value, or `default`."""
+function _bruker_int_at(h::Header, key::AbstractString, i::Int, default::Int)
+    v = getci(h, key)
+    v === nothing && return default
+    toks = split(strip(String(v)))
+    length(toks) < i && return default
+    p = tryparse(Int, toks[i])
+    return p === nothing ? default : p
+end
