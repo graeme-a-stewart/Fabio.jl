@@ -38,6 +38,24 @@ using Fabio: writepnm, writemrc, writege, PnmASCII, PnmBitmap
         @test header(frame)["SUBFORMAT"] == "P2"
     end
 
+    @testset "comments are kept, being the format's only metadata" begin
+        A = UInt16[1 2; 3 4]
+        p = joinpath(TMP, "comments_meta.pgm")
+        text = "CREATOR: Fabio.jl\nexposure 1.5 s\nwavelength 0.9793"
+        writepnm(p, A; comment = text)
+        h = Fabio.readheader(p)
+        @test h["Comments"] == text
+        @test split(h["Comments"], "\n")[2] == "exposure 1.5 s"
+        # Feeding the recovered comments back reproduces the file exactly.
+        q = joinpath(TMP, "comments_meta2.pgm")
+        writepnm(q, collect(Fabio.readimage(p)); comment = h["Comments"])
+        @test read(p) == read(q)
+        # A file without comments gets no Comments entry rather than an empty one.
+        r = joinpath(TMP, "nocomment.pgm")
+        writepnm(r, A)
+        @test !haskey(Fabio.readheader(r), "Comments")
+    end
+
     @testset "comments and split lines in the header" begin
         # Netpbm allows '#' comments anywhere and does not care how fields are split.
         body = "P5\n# a comment\n4\n# another\n3\n255\n"
@@ -50,6 +68,7 @@ using Fabio: writepnm, writemrc, writege, PnmASCII, PnmBitmap
         frame = Fabio.readimage(p)
         @test size(frame) == (4, 3)
         @test vec(collect(frame)) == pix
+        @test header(frame)["Comments"] == "a comment\nanother"
     end
 
     @testset "P4 packed bitmap" begin

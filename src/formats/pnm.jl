@@ -79,16 +79,25 @@ function decode(::PnmBitmap, raw::AbstractVector{UInt8}, ::Type{T}, dims::Dims{2
     return out
 end
 
-"""Read the next whitespace-delimited token, skipping `#` comments. Returns `(token, newpos)`."""
-function _pnm_token(src::AbstractSource, pos::Int)
+"""
+Read the next whitespace-delimited token. Returns `(token, newpos)`.
+
+Any `#` comments passed over are appended to `comments` rather than dropped: they are the only
+metadata a Netpbm file can carry, so discarding them would leave the header with nothing but
+the image geometry.
+"""
+function _pnm_token(src::AbstractSource, pos::Int, comments::Vector{String} = String[])
     n = filesize(src)
     i = pos
     while i < n
         b = _byteat(src, i)
         if b == UInt8('#')
+            start = i + 1
             while i < n && _byteat(src, i) != UInt8('\n')
                 i += 1
             end
+            text = strip(String(Char.(bytes(src, start, i - start))))
+            isempty(text) || push!(comments, String(text))
         elseif b <= UInt8(' ')
             i += 1
         else
@@ -104,7 +113,8 @@ function _pnm_token(src::AbstractSource, pos::Int)
 end
 
 function scan(::PNM, src::AbstractSource)
-    magic, pos = _pnm_token(src, 0)
+    comments = String[]
+    magic, pos = _pnm_token(src, 0, comments)
     magic in ("P1", "P2", "P4", "P5") || throw(
         UnsupportedFormatError(
             magic in ("P3", "P6", "P7") ?
@@ -113,8 +123,8 @@ function scan(::PNM, src::AbstractSource)
         ),
     )
 
-    wtok, pos = _pnm_token(src, pos)
-    htok, pos = _pnm_token(src, pos)
+    wtok, pos = _pnm_token(src, pos, comments)
+    htok, pos = _pnm_token(src, pos, comments)
     width = something(tryparse(Int, wtok), 0)
     height = something(tryparse(Int, htok), 0)
     (width > 0 && height > 0) ||
@@ -123,7 +133,7 @@ function scan(::PNM, src::AbstractSource)
     bitmap = magic in ("P1", "P4")
     maxval = 1
     if !bitmap
-        mtok, pos = _pnm_token(src, pos)
+        mtok, pos = _pnm_token(src, pos, comments)
         maxval = something(tryparse(Int, mtok), 0)
         maxval > 0 || throw(CorruptFileError("PNM: bad MAXVAL $(repr(mtok))"))
     end
@@ -141,6 +151,9 @@ function scan(::PNM, src::AbstractSource)
     h["WIDTH"] = width
     h["HEIGHT"] = height
     h["MAXVAL"] = maxval
+    # Several comment lines join with newlines, the same convention the Bruker reader uses
+    # for a key repeated across lines.
+    isempty(comments) || (h["Comments"] = join(comments, "\n"))
 
     # Exactly one whitespace byte separates the header from binary data.
     dataoffset = magic in ("P4", "P5") ? pos + 1 : pos
@@ -175,6 +188,9 @@ _fixbyteorder!(A, ::ByteOrder, ::PnmBitmap) = A
     writepnm(path, A; ascii = false, comment = "")
 
 Write a binary (`P5`) or ASCII (`P2`) greyscale PGM. `MAXVAL` follows the element type.
+
+`comment` is written as `#` lines, one per embedded newline, which is the only metadata the
+format admits. Passing back the `Comments` entry the reader produces round-trips it.
 """
 function writepnm(
     path::AbstractString,
@@ -186,7 +202,9 @@ function writepnm(
     maxval = T === UInt8 ? 255 : 65535
     io = IOBuffer()
     print(io, ascii ? "P2\n" : "P5\n")
-    isempty(comment) || print(io, "# ", comment, "\n")
+    for line in split(comment, '\n')
+        isempty(strip(line)) || print(io, "# ", line, "\n")
+    end
     print(io, width, " ", height, "\n", maxval, "\n")
     Base.open(path, "w") do f
         Base.write(f, take!(io))
