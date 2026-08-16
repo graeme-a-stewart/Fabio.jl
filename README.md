@@ -86,6 +86,7 @@ detector data is opt-in, since it is generally not redistributable:
 ```bash
 FABIO_JL_LOCAL_TESTDATA=/path/to/esperanto/files \
 FABIO_JL_MAR345_TESTDATA=/path/to/mar2300/files \
+FABIO_JL_PILATUS_TESTDATA=/path/to/pilatus/tiffs \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
