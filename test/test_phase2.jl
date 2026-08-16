@@ -180,6 +180,17 @@ end
         end
     end
 
+    @testset "the blanked-header fallback constants" begin
+        # These are the geometry a blanked GE file has to be read with, since its header says
+        # nothing. They are corroborated by a hexrd frame-cache of real GE detector data,
+        # whose metadata records shape [2048, 2048], dtype uint16 and panel "GE", and by
+        # FabIO reading a blanked file written with them and finding the same frames.
+        @test Fabio.GE_DEFAULT_ROWS == 2048
+        @test Fabio.GE_DEFAULT_COLS == 2048
+        @test Fabio.GE_DEFAULT_DEPTH == 16
+        @test Fabio.GE_DEFAULT_HEADER_BYTES == 8192
+    end
+
     @testset "a blanked header falls back to the APS geometry" begin
         # The APS firmware writes the header as zeros; the frame count then has to come from
         # the file size, and the geometry from what that detector is known to produce.
