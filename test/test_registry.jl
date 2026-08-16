@@ -59,6 +59,24 @@ end
         end
     end
 
+    @testset "a format can decline after its magic matches" begin
+        # A blanked GE header is a run of zero bytes, which any format with a sparsely
+        # populated fixed header can also begin with. GE therefore checks that the file could
+        # hold one of its frames, and `refine` returning nothing lets detection carry on to
+        # the next candidate instead of the match being final.
+        small = joinpath(TMP, "tenzeros.spe")
+        Fabio.writespe(small, [Int16[1 2; 3 4]])
+        raw = read(small)
+        raw[1:16] .= 0x00                       # make it start with a blanked-GE signature
+        write(small, raw)
+        @test Fabio.openimage(f -> Fabio.imageformat(f), small) isa SPE
+
+        # A file that really is big enough is still claimed by GE.
+        big = joinpath(TMP, "blanked_big.ge")
+        Fabio.writege(big, [zeros(UInt16, 2048, 2048)]; blanked = true)
+        @test Fabio.openimage(f -> Fabio.imageformat(f), big) isa GE
+    end
+
     @testset "unknown formats are reported clearly" begin
         junk = joinpath(TMP, "junk.unknown")
         write(junk, UInt8[0xAB, 0xCD, 0xEF, 0x01, 0x02, 0x03, 0x04, 0x05])

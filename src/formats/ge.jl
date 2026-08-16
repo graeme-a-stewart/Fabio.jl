@@ -41,6 +41,26 @@ const GE_FIELDS = (
 
 const GE_DEPTH_TYPES = Dict(8 => UInt8, 16 => UInt16, 32 => UInt32)
 
+"""
+Decline files that only match GE's blanked signature by accident.
+
+A blanked GE header is a run of zero bytes, which any format whose fixed header is sparsely
+populated can also begin with — SPE is one. A genuine blanked GE file has to be at least large
+enough for its 8192-byte header plus one 2048x2048 16-bit frame, so anything smaller is
+somebody else's.
+"""
+function refine(
+    fmt::GE,
+    head::AbstractVector{UInt8},
+    ::Union{Nothing,AbstractString},
+    src::AbstractSource,
+)
+    length(head) >= 5 && @views(head[1:5]) == Vector{UInt8}(codeunits("ADEPT")) && return fmt
+    minimum_blanked =
+        GE_DEFAULT_HEADER_BYTES + GE_DEFAULT_ROWS * GE_DEFAULT_COLS * (GE_DEFAULT_DEPTH ÷ 8)
+    return filesize(src) >= minimum_blanked ? fmt : nothing
+end
+
 function scan(::GE, src::AbstractSource)
     n = filesize(src)
     n < 64 && throw(TruncatedFileError("GE: file is too short for a header"))

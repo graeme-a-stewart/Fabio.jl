@@ -6,7 +6,8 @@ format, handles compression, and hands back the pixels as a Julia array of the t
 stored in the file, alongside the header.
 
 **Status: Phase 2 in progress.** Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC,
-EDF, Esperanto, GE, mar345, MRC, Netpbm, TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+EDF, Esperanto, Fit2D mask, GE, mar345, MRC, Netpbm, R-AXIS, SPE, TIFF (plain, Pilatus and
+MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -30,7 +31,7 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: Bruker (86, 100), CBF, d\*TREK/ADSC, EDF, Esperanto, GE, mar345, MRC, Netpbm, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
+| Formats: Bruker (86, 100), CBF, d\*TREK/ADSC, EDF, Esperanto, Fit2D mask, GE, mar345, MRC, Netpbm, R-AXIS, SPE, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
 | Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Netpbm ASCII and packed bits | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/pnm.jl` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |

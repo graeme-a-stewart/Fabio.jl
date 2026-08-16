@@ -4,12 +4,17 @@ Number of leading bytes examined when identifying a file.
 const MAGIC_WINDOW = 64
 
 """
-    refine(fmt, head, path, src) -> ImageFormat
+    refine(fmt, head, path, src) -> Union{ImageFormat,Nothing}
 
 Hook allowing a format *family* to resolve itself to a more specific member after its magic
 number has matched. This replaces FabIO's practice of putting composite strings such as
 `"eiger/lima/sparse/hdf5/lambda"` and `"marccd/tif"` into the magic table and special-casing
 them inside the detection function.
+
+Returning `nothing` **declines** the file, and detection carries on with the next candidate.
+That matters for signatures that cannot help being ambiguous: a blanked GE header is a run of
+zero bytes, which any format with a sparsely populated fixed header can begin with, so GE looks
+at whether the file is even large enough to hold one of its frames before claiming it.
 
 Default: the format identifies itself.
 """
@@ -43,7 +48,9 @@ function detectformat(
         e.reader || continue
         for m in e.magics
             if matches(m, head)
-                return refine(e.format, head, path, src)
+                fmt = refine(e.format, head, path, src)
+                fmt === nothing || return fmt
+                break            # this format declined; try the next candidate
             end
         end
     end

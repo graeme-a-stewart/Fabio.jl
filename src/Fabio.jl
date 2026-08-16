@@ -82,13 +82,16 @@ include("formats/dtrek.jl")
 include("formats/edf.jl")
 include("formats/ge.jl")
 include("formats/esperanto.jl")
+include("formats/fit2dmask.jl")
 include("formats/mar345.jl")
 include("formats/mrc.jl")
 include("formats/pnm.jl")
+include("formats/raxis.jl")
+include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, Dtrek, EDF, Esperanto, GE, Mar345, MRC, NPY, PNM, TIFFLike
+export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2DMask, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -174,6 +177,29 @@ function registerdefaults!()
         description = "Tagged Image File Format (baseline, uncompressed)",
         extensions = ["tif", "tiff"],
         magic = [Magic(TIFF_LE), Magic(TIFF_BE)],
+        writer = false,
+    )
+    register!(
+        Fit2DMask();
+        name = :fit2dmask,
+        description = "Fit2D mask (one bit per pixel)",
+        extensions = ["msk"],
+        magic = [Magic(UInt8['M', 0, 0, 0, 'A', 0, 0, 0, 'S', 0, 0, 0, 'K', 0, 0, 0])],
+        writer = true,
+    )
+    register!(
+        Raxis();
+        name = :raxis,
+        description = "Rigaku R-AXIS imaging plate",
+        extensions = ["img", "osc"],
+        magic = [Magic("R-AXIS"), Magic("RAXIS")],
+        writer = false,
+    )
+    register!(
+        SPE();
+        name = :spe,
+        description = "Princeton Instruments WinSpec (multi-frame)",
+        extensions = ["spe"],
         writer = false,
     )
     register!(
