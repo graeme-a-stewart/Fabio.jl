@@ -62,6 +62,10 @@ function scan(::KCD, src::AbstractSource)
         stop = nl === nothing ? ncodeunits(text) : nl - 1
         line = text[pos:stop]
         lineno += 1
+        # "Binned mode" is the one header line with no '=', so it has to be rewritten before
+        # the end-of-header test rather than after it. Testing first stops the parse dead
+        # there and loses every line below, which on a real file is most of the header.
+        strip(line) == "Binned mode" && (line = "Mode = Binned")
         # The header ends at the first line that is over-long or carries no '='; the binary
         # tail has neither property reliably, so both checks are needed.
         (length(line) > 100 || (lineno > 1 && !occursin('=', line))) && break
@@ -70,8 +74,6 @@ function scan(::KCD, src::AbstractSource)
             key = String(strip(line[1:prevind(line, i)]))
             val = String(strip(line[nextind(line, i):end], ['\0', ' ', '\t', '\r']))
             isempty(key) || (h[key] = val)
-        elseif strip(line) == "Binned mode"
-            h["Mode"] = "Binned"
         end
         nl === nothing && break
         pos = nl + 1

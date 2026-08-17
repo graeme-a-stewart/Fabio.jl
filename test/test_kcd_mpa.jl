@@ -55,6 +55,23 @@ using Fabio: writekcd, writempa, KcdReadouts, MpaASCII
         @test collect(Fabio.readimage(padded)) == A
     end
 
+    @testset "a bare 'Binned mode' line does not end the header" begin
+        # It is the one header line without an '=', so a reader that treats such a line as
+        # the end of the header loses everything below it.
+        A = Int32[1 2; 3 4]
+        p = joinpath(TMP, "binned.kcd")
+        writekcd(p, A)
+        raw = String(read(p))
+        raw = replace(raw, "Data type = u16\n" => "Binned mode\nData type = u16\nAfter = yes\n")
+        q = joinpath(TMP, "binned2.kcd")
+        write(q, Vector{UInt8}(codeunits(raw)))
+        h = Fabio.readheader(q)
+        @test h["Mode"] == "Binned"
+        @test h["Data type"] == "u16"
+        @test h["After"] == "yes"          # the key a premature stop would drop
+        @test collect(Fabio.readimage(q)) == A
+    end
+
     @testset "a missing shape is refused" begin
         p = joinpath(TMP, "noshape.kcd")
         write(p, Vector{UInt8}(codeunits("Nonius\nData type = u16\nEnd\n" * "\0"^64)))

@@ -93,6 +93,7 @@ FABIO_JL_SFRM_TESTDATA=/path/to/sfrm/files \
 FABIO_JL_ADSC_TESTDATA=/path/to/adsc/img/files \
 FABIO_JL_MRC_TESTDATA=/path/to/mrc/files \
 FABIO_JL_HEXRD_EXAMPLES=/path/to/hexrd/examples \
+FABIO_JL_KCD_TESTDATA=/path/to/kcd/files \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
@@ -156,9 +157,10 @@ the two.
 | GE | 3 (hexrd examples) | pixels and checksum; the 6144 + 2048 split header; blanked-header geometry corroborated by a frame cache |
 | TIFF, `Float32` samples | 1 (hexrd examples) | pixels against FabIO |
 | EDF, NumPy | — | round-trip only |
-| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, KCD, MPA, DM3, OXD** | **none** | **round-trip only** |
+| KCD | 286 | pixels and checksum; **525 of 525 header entries identical** |
+| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, MPA, DM3, OXD** | **none** | **round-trip only** |
 
-The nine in the last row rest entirely on this package's own writers. For `.f2d` that gap
+The eight in the last row rest entirely on this package's own writers. For `.f2d` that gap
 matters most, because FabIO's reader is wrong in three places (below), so there is no sound
 reference to check against — a real `.f2d` is what would settle its byte order.
 
