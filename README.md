@@ -7,7 +7,7 @@ stored in the file, alongside the header.
 
 **Status: Phase 2 in progress.** Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC,
 DM3, EDF, Esperanto, Fit2D (binary and mask), GE, KCD, mar345, MPA, MRC, Netpbm, OXD,
-R-AXIS, SPE, TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+R-AXIS, SPE, TIFF (plain, Pilatus and MarCCD), Xcalibur and NumPy. **Phase 2 is complete.** See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -31,7 +31,7 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: Bruker (86, 100), CBF, DM3, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, KCD, mar345, MPA, MRC, Netpbm, OXD, R-AXIS, SPE, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
+| Formats: Bruker (86, 100), CBF, DM3, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, KCD, mar345, MPA, MRC, Netpbm, OXD, R-AXIS, SPE, TIFF/Pilatus/MarCCD, Xcalibur, NumPy | `src/formats/` |
 | Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Bruker overflow tables, Netpbm ASCII and packed bits, Fit2D chunked and bit-mask, R-AXIS photomultiplier, KCD readout summing, MPA ASCII, OXD TY1 and TY5 | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
@@ -158,6 +158,7 @@ the two.
 | TIFF, `Float32` samples | 1 (hexrd examples) | pixels against FabIO |
 | EDF, NumPy | — | round-trip only |
 | KCD | 286 | pixels and checksum; **525 of 525 header entries identical** |
+| Xcalibur | — | struct parsing agrees with FabIO's own `CcdCharacteristiscs.read`, which its image reader never calls |
 | **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, MPA, DM3, OXD** | **none** | **round-trip only** |
 
 The eight in the last row rest entirely on this package's own writers. For `.f2d` that gap
@@ -184,6 +185,11 @@ are why a comparison had to be done indirectly.
   `MarccdImage._readheader`, which parses the 3072-byte struct into `self.header`, and then
   `_read_with_tiffio` overwrites `self.header` with the TIFF tags. Reaching the fields requires
   calling `marccdimage.interpret_header` directly.
+- **Xcalibur cannot read anything.** `XcaliburImage.read` is the unmodified
+  `templateimage.py` boilerplate: it ignores the file, builds a 50×60 array and then raises
+  `AttributeError`, since the template's `self.uint16` is not an attribute. The struct
+  definitions and `CcdCharacteristiscs.loads` beside it are complete and correct — nothing
+  ever connected them to the reader.
 - **Fit2D reals.** `hex_to(stg, "float")` never looks at `stg`; it returns a hardcoded constant
   of about 1e-4, so every real-valued field in every `.f2d` file reads back as the same number.
 - **Fit2D block size.** For files not written in 512-byte blocks, the larger size is worked out

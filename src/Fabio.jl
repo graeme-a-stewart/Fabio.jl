@@ -95,8 +95,9 @@ include("formats/raxis.jl")
 include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
+include("formats/xcalibur.jl")
 
-export Bruker, CBF, DM3, Dtrek, EDF, OXD, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, DM3, Dtrek, EDF, OXD, Xcalibur, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -255,6 +256,15 @@ function registerdefaults!()
         extensions = ["img"],
         magic = [Magic("OD")],
         priority = -1,           # a two-byte signature, so let longer ones win
+        writer = false,
+    )
+    # No magic number and no extension FabIO recognises, so it is reached by an explicit
+    # `format = Xcalibur(...)` rather than by detection.
+    register!(
+        Xcalibur();
+        name = :xcalibur,
+        description = "CrysalisPro chip characteristics (bad-pixel mask)",
+        extensions = ["ccd"],
         writer = false,
     )
     register!(
