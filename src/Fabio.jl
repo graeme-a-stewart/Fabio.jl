@@ -78,6 +78,7 @@ include("api.jl")
 
 include("formats/bruker.jl")
 include("formats/cbf.jl")
+include("formats/dm3.jl")
 include("formats/dtrek.jl")
 include("formats/edf.jl")
 include("formats/ge.jl")
@@ -94,7 +95,7 @@ include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, DM3, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -211,6 +212,14 @@ function registerdefaults!()
         name = :spe,
         description = "Princeton Instruments WinSpec (multi-frame)",
         extensions = ["spe"],
+        writer = false,
+    )
+    register!(
+        DM3();
+        name = :dm3,
+        description = "Gatan Digital Micrograph",
+        extensions = ["dm3"],
+        magic = [Magic(UInt8[0x00, 0x00, 0x00, 0x03])],
         writer = false,
     )
     register!(

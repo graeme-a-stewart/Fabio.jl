@@ -6,8 +6,8 @@ format, handles compression, and hands back the pixels as a Julia array of the t
 stored in the file, alongside the header.
 
 **Status: Phase 2 in progress.** Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC,
-EDF, Esperanto, Fit2D (binary and mask), GE, KCD, mar345, MPA, MRC, Netpbm, R-AXIS, SPE,
-TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
+DM3, EDF, Esperanto, Fit2D (binary and mask), GE, KCD, mar345, MPA, MRC, Netpbm, R-AXIS,
+SPE, TIFF (plain, Pilatus and MarCCD) and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the format roadmap.
 
 ```julia
 using Fabio, Statistics
@@ -31,7 +31,7 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 
 | Piece | File |
 |---|---|
-| Formats: Bruker (86, 100), CBF, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, KCD, mar345, MPA, MRC, Netpbm, R-AXIS, SPE, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
+| Formats: Bruker (86, 100), CBF, DM3, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, KCD, mar345, MPA, MRC, Netpbm, R-AXIS, SPE, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
 | Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Bruker overflow tables, Netpbm ASCII and packed bits, Fit2D chunked and bit-mask, R-AXIS photomultiplier, KCD readout summing, MPA ASCII | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
@@ -156,9 +156,9 @@ the two.
 | GE | 3 (hexrd examples) | pixels and checksum; the 6144 + 2048 split header; blanked-header geometry corroborated by a frame cache |
 | TIFF, `Float32` samples | 1 (hexrd examples) | pixels against FabIO |
 | EDF, NumPy | — | round-trip only |
-| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, KCD, MPA** | **none** | **round-trip only** |
+| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, KCD, MPA, DM3** | **none** | **round-trip only** |
 
-The seven in the last row rest entirely on this package's own writers. For `.f2d` that gap
+The eight in the last row rest entirely on this package's own writers. For `.f2d` that gap
 matters most, because FabIO's reader is wrong in three places (below), so there is no sound
 reference to check against — a real `.f2d` is what would settle its byte order.
 
