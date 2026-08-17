@@ -84,7 +84,9 @@ include("formats/ge.jl")
 include("formats/esperanto.jl")
 include("formats/fit2d.jl")
 include("formats/fit2dmask.jl")
+include("formats/kcd.jl")
 include("formats/mar345.jl")
+include("formats/mpa.jl")
 include("formats/mrc.jl")
 include("formats/pnm.jl")
 include("formats/raxis.jl")
@@ -92,7 +94,7 @@ include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -209,6 +211,23 @@ function registerdefaults!()
         name = :spe,
         description = "Princeton Instruments WinSpec (multi-frame)",
         extensions = ["spe"],
+        writer = false,
+    )
+    register!(
+        KCD();
+        name = :kcd,
+        description = "Nonius KappaCCD",
+        extensions = ["kcd"],
+        magic = [Magic("No")],
+        priority = -1,          # a two-byte signature, so let longer ones win
+        writer = false,
+    )
+    register!(
+        MPA();
+        name = :mpa,
+        description = "Multi-wire detector (FastComTec)",
+        extensions = ["mpa"],
+        magic = [Magic("[ADC1]")],
         writer = false,
     )
     register!(
