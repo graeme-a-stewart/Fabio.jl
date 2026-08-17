@@ -89,13 +89,14 @@ include("formats/kcd.jl")
 include("formats/mar345.jl")
 include("formats/mpa.jl")
 include("formats/mrc.jl")
+include("formats/oxd.jl")
 include("formats/pnm.jl")
 include("formats/raxis.jl")
 include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, DM3, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, DM3, Dtrek, EDF, OXD, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -245,6 +246,15 @@ function registerdefaults!()
         description = "MRC / CCP4 map (multi-frame)",
         extensions = ["mrc", "map", "fei"],
         magic = [Magic("MAP ", 208), Magic("MAP\0", 208)],
+        writer = false,
+    )
+    register!(
+        OXD();
+        name = :oxd,
+        description = "Oxford Diffraction / KM4 CCD",
+        extensions = ["img"],
+        magic = [Magic("OD")],
+        priority = -1,           # a two-byte signature, so let longer ones win
         writer = false,
     )
     register!(
