@@ -32,7 +32,7 @@ Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
 | Piece | File |
 |---|---|
 | Formats: Bruker (86, 100), CBF, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, mar345, MRC, Netpbm, R-AXIS, SPE, TIFF/Pilatus/MarCCD, NumPy | `src/formats/` |
-| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Netpbm ASCII and packed bits | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/pnm.jl` |
+| Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Bruker overflow tables, Netpbm ASCII and packed bits, Fit2D chunked and bit-mask, R-AXIS photomultiplier | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
 | Blob decoding, byte order, orientation | `src/blob.jl` |
@@ -91,14 +91,18 @@ FABIO_JL_PILATUS_TESTDATA=/path/to/pilatus/tiffs \
 FABIO_JL_MARCCD_TESTDATA=/path/to/mccd/files \
 FABIO_JL_SFRM_TESTDATA=/path/to/sfrm/files \
 FABIO_JL_ADSC_TESTDATA=/path/to/adsc/img/files \
+FABIO_JL_MRC_TESTDATA=/path/to/mrc/files \
+FABIO_JL_HEXRD_EXAMPLES=/path/to/hexrd/examples \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-Those testsets check real frames against reference statistics produced by FabIO itself — a
-2048² AGI-bitfield Esperanto frame and a 2300² mar345 frame — and assert that the threaded
-row-indexed AGI decoder agrees with the sequential one across a whole frame. The mar345 files
-are the dataset the FabIO documentation uses for its file-series example, Zenodo
-[10.5281/zenodo.2546760](https://doi.org/10.5281/zenodo.2546760).
+Each of those testsets compares against reference values produced by the Python FabIO reading
+the same files. Where a whole-frame comparison is made it uses a **position-sensitive
+checksum** — the sum of each value times its flat index — as well as the minimum, maximum and
+sum, because a transposition or a reordered strip leaves all three aggregates unchanged.
+
+The mar345 files are the dataset the FabIO documentation uses for its file-series example,
+Zenodo [10.5281/zenodo.2546760](https://doi.org/10.5281/zenodo.2546760).
 
 ## Performance
 
@@ -130,13 +134,62 @@ frame.
 
 A full pass over 140 real files (2048², ~3.2 MB each) takes **0.99 s**.
 
-## Interoperability
+## What has been checked against real files
 
-The CBF reader and writer are checked against the Python FabIO in both directions: FabIO reads
-a CBF written here, and this package reads a CBF written by FabIO, with the arrays identical in
-each case. The Esperanto and mar345 readers are checked against reference statistics — minimum,
-maximum, sum, mean, standard deviation and individual pixel values — produced by FabIO from real
-detector files.
+Not every reader is equally trustworthy, and the difference is worth knowing before you rely on
+one. A round-trip through this package's own writer only shows that its reader and writer agree
+with each other; it says nothing about whether either matches the format. The table separates
+the two.
+
+| Reader | Real files | What was compared |
+|---|---|---|
+| Pilatus / TIFF | 72 | pixels and checksum; **1934 of 1934 header entries identical** |
+| MarCCD | 360 | pixels and checksum; all 19 binary-header fields; writer output read back by FabIO |
+| Bruker 100 | 22637 read, 151 vs FabIO | pixels and checksum; every correction path exercised |
+| Bruker 86 | 6 | pixels and checksum |
+| d\*TREK / ADSC | 1424 read, 119 vs FabIO | pixels and checksum; **3193 of 3193 header entries identical**; both byte orders |
+| MRC | 10 EMDB | pixels on the 8 FabIO can open; header settled against the data itself |
+| Esperanto | 140 | min, max, sum, mean, standard deviation and pixel values |
+| mar345 | 4 (Zenodo 2546760) | min, max, sum, mean, standard deviation and pixel values |
+| CBF | — | **bidirectional**: FabIO reads what this writes, and this reads what FabIO writes |
+| TIFF, multi-strip | 6 fixtures | written by [tifffile](https://github.com/cgohlke/tifffile); both strip layouts |
+| GE | 3 (hexrd examples) | pixels and checksum; the 6144 + 2048 split header; blanked-header geometry corroborated by a frame cache |
+| TIFF, `Float32` samples | 1 (hexrd examples) | pixels against FabIO |
+| EDF, NumPy | — | round-trip only |
+| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask** | **none** | **round-trip only** |
+
+The five in the last row rest entirely on this package's own writers. For `.f2d` that gap
+matters most, because FabIO's reader is wrong in three places (below), so there is no sound
+reference to check against — a real `.f2d` is what would settle its byte order.
+
+## Defects found in FabIO along the way
+
+Recorded because they affect anyone using FabIO for these formats, and because several of them
+are why a comparison had to be done indirectly.
+
+- **MRC header fields.** FabIO reads all 56 header words as `Int32` and names only the first
+  thirty, so the cell dimensions, density statistics and origin are meaningless and the `MAP`
+  stamp is looked for at word 27 instead of word 53. Its own check that `MAP` reads back as
+  `"MAP "` therefore never succeeds; it logs at info level and continues. This reader follows
+  MRC2014, which the files confirm: `DMIN`, `DMAX` and `DMEAN` are stored statistics of the
+  pixel data and agree with it to full float precision, and the cell angles read exactly 90°.
+- **MRC frame access.** `get_frame(n)` and `getframe(n)` raise `AttributeError` for any frame,
+  because both copy the deprecated `dim1` attribute onto a frame whose `data` is still `None`.
+  Only `fabio.open(path, frame=n)` works.
+- **MRC labels.** The ten 80-character labels are decoded as strict UTF-8, so two of the ten
+  EMDB files tested cannot be opened at all. This reader maps bytes to codepoints.
+- **MarCCD header.** `fabio.open` never exposes it. `TifImage.read` calls
+  `MarccdImage._readheader`, which parses the 3072-byte struct into `self.header`, and then
+  `_read_with_tiffio` overwrites `self.header` with the TIFF tags. Reaching the fields requires
+  calling `marccdimage.interpret_header` directly.
+- **Fit2D reals.** `hex_to(stg, "float")` never looks at `stg`; it returns a hardcoded constant
+  of about 1e-4, so every real-valued field in every `.f2d` file reads back as the same number.
+- **Fit2D block size.** For files not written in 512-byte blocks, the larger size is worked out
+  and the file seeks back to the start, but the stale block already read is then parsed instead
+  of the scan resuming.
+- **Fit2D byte order.** `i` and `r` arrays are decoded in the machine's native order while `l`
+  masks are decoded big-endian, in the same function, so the same file gives different pixels on
+  different machines.
 
 ## Licence
 
