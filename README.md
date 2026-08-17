@@ -166,11 +166,15 @@ the two.
 | Fit2D binary | 2 | pixels against FabIO — and these settled the byte order |
 | Fit2D mask | 2 | pixels against FabIO, including a 123×456 non-word-aligned mask |
 | MPA | 1 | pixels against FabIO — this one found a bug |
-| **Netpbm** | **none** | **round-trip only** |
+| Netpbm | 6 | written by the netpbm toolkit; checked against the source arithmetic and netpbm's own conversions |
 
-Netpbm is the only reader left resting entirely on this package's own writer, and it is the
-one where that matters least: the format is a header of four fields and a raster, and any
-`netpbm` or ImageMagick tool writes an independent fixture in one command.
+**Every reader here has now been checked against files this package did not write.**
+
+The Netpbm fixtures come from the netpbm toolkit itself and are checked without reference to
+FabIO, which reads only P5 of the six: it rejects the plain P2 with "Size spec in pnm-header
+does not match size of image data" and fails on both bitmaps. The expected values are instead
+the arithmetic fed to netpbm, and netpbm's own conversions between the encodings, which have to
+decode identically.
 
 Those real files came from the archive FabIO's own test suite downloads,
 `http://www.edna-site.org/pub/fabio/testimages`. Three small ones are committed here (see
@@ -210,6 +214,10 @@ are why a comparison had to be done indirectly.
   masks are decoded big-endian, in the same function, so the same file gives different pixels on
   different machines. Real files show little-endian is right for the arrays, which is what this
   package now does; on a big-endian machine FabIO would misread them.
+- **Netpbm subformats.** In practice only P5 is readable: a plain P2 raises "Size spec in
+  pnm-header does not match size of image data", a packed P4 raises `ValueError` from parsing
+  binary as an integer, and a plain P1 raises "could not figure out what kind of pixels you
+  have". All three are read here.
 - **SPE frame count.** `SpeImage` never sets `_nframes`, so a two-frame file reports
   `nframes = 1` while its own header says `num_frames = 2`. Both frames are readable through
   `fabio.open(path, frame=n)`.

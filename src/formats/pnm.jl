@@ -50,16 +50,26 @@ function decode(c::PnmASCII, raw::AbstractVector{UInt8}, ::Type{T}, dims::Dims{2
             i += 1
             continue
         end
-        v = 0
-        while i <= len && raw[i] > UInt8(' ') && raw[i] != UInt8('#')
-            d = raw[i] - UInt8('0')
-            d > 9 && throw(CorruptFileError("PNM: non-numeric byte in ASCII pixel data"))
-            v = v * 10 + Int(d)
+        if c.bits
+            # A plain PBM pixel is a single character. Whitespace between them is allowed
+            # but not required, and netpbm writes none — so reading whitespace-delimited
+            # tokens swallows an entire row as one enormous number.
+            d = b - UInt8('0')
+            d > 1 && throw(CorruptFileError("PNM: $(repr(Char(b))) is not a bit"))
+            k += 1
+            out[k] = T(d == 0 ? 1 : 0)           # a set bit is black
             i += 1
+        else
+            v = 0
+            while i <= len && raw[i] > UInt8(' ') && raw[i] != UInt8('#')
+                d = raw[i] - UInt8('0')
+                d > 9 && throw(CorruptFileError("PNM: non-numeric byte in ASCII pixel data"))
+                v = v * 10 + Int(d)
+                i += 1
+            end
+            k += 1
+            out[k] = T(v)
         end
-        k += 1
-        # In a PBM a set bit means black, the opposite of a PGM's intensity.
-        out[k] = T(c.bits ? (v == 0 ? 1 : 0) : v)
     end
     k == n || throw(TruncatedFileError("PNM: found $k of $n ASCII pixel values"))
     return out
