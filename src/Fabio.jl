@@ -82,6 +82,7 @@ include("formats/dtrek.jl")
 include("formats/edf.jl")
 include("formats/ge.jl")
 include("formats/esperanto.jl")
+include("formats/fit2d.jl")
 include("formats/fit2dmask.jl")
 include("formats/mar345.jl")
 include("formats/mrc.jl")
@@ -91,7 +92,7 @@ include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 
-export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2DMask, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, Dtrek, EDF, Esperanto, Fit2D, Fit2DMask, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -177,6 +178,14 @@ function registerdefaults!()
         description = "Tagged Image File Format (baseline, uncompressed)",
         extensions = ["tif", "tiff"],
         magic = [Magic(TIFF_LE), Magic(TIFF_BE)],
+        writer = false,
+    )
+    register!(
+        Fit2D{:big}();
+        name = :fit2d,
+        description = "Fit2D binary (record-structured)",
+        extensions = ["f2d"],
+        magic = [Magic("\\\$FFF_START")],
         writer = false,
     )
     register!(
