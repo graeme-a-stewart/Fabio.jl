@@ -925,12 +925,23 @@ padding, §4.3) that tool becomes straightforward to port later.
 | Phase | Content | Why |
 |---|---|---|
 | **0** ✅ | Core: types, sources, compression, registry, detection, blob reader, `RawBlob`, `ZlibBlob`. Formats: **EDF**, **Esperanto** (+`AGIBitfield`), `.npy`. **Built and tested** — 168 self-contained tests plus 22 against real Esperanto data. | EDF exercises multi-frame, per-frame headers, endianness, zlib blobs, `.gz`. Esperanto adds a real codec validated against your 140 files. Together they proved tier 1. |
-| **1** | `ByteOffset` + **CBF**; `PCK` + **mar345** (validates against Zenodo 2546760 and unlocks doc use case §16.5); **TIFF family** via ext; **ADSC**, **Bruker**, **Bruker100**. | The formats people actually have; proves tier 2 and `refine`. |
-| **2** | **OXD**, **dtrek**, **GE**, **PNM**, **MRC**, **SPE**, **fit2d**, **kcd**, **raxis**, **mpa**, **dm3**, **xcalibur**. | Bulk coverage; all tier 1. |
-| **3** | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | Needs weak-deps and `refine` working properly. |
+| **1** ✅ | `ByteOffset` + **CBF**; `PCK` + **mar345**; the **TIFF family** (plain, Pilatus, MarCCD) in the core rather than an extension; **ADSC/d\*TREK**, **Bruker 86 and 100**. | Done. TIFF turned out to be mostly tier 1 — see the note below — and multi-strip TIFF is what exercises tier 2. |
+| **2** ✅ | **OXD** (TY1, TY5), **GE**, **Netpbm**, **MRC**, **SPE**, **Fit2D** binary and mask, **KCD**, **R-AXIS**, **MPA**, **DM3**, **Xcalibur**. | Done, all tier 1. Xcalibur had no reader in FabIO to port — its `read` is unmodified template boilerplate that raises — so this one is new work rather than a translation. |
+| **3** ⬅ next | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | The first real use of the weak-dependency design, and the first family that genuinely needs tier 2, since an HDF5 dataset is not a byte range. |
 | **4** | Writers, `convert`/`coerce` matrix, `FileSeries`, FileIO.jl registration, `ImageMetadata`, `fabio-convert` CLI. | Parity polish. |
 
-Phase 0 is the real design test — roughly two weeks. Everything after is largely mechanical
+**What the first three phases changed about this design.** Two predictions in §3 and §5 were
+wrong in interesting ways. TIFF was expected to be the tier-2 exercise; it is not, because a
+contiguous image — even a multi-strip one — is still a single `BinaryLayout`, so only genuinely
+disjoint strips need `readframe`. "Offset plus codec" describes more formats than this document
+predicted, and 21 of 23 formats are tier 1. Separately, a magic match had to stop being final:
+SPE has no signature and a header of mostly zeros, so it collided with GE's blanked-header
+signature, and `refine` now returns `nothing` to decline a file and let detection continue.
+
+See [STATUS.md](STATUS.md) for where the work actually stands, the open questions, and how to
+run the real-data tests.
+
+Phase 0 was the real design test — roughly two weeks. Everything after is largely mechanical
 per-format work, which is the point of the architecture.
 
 ---
