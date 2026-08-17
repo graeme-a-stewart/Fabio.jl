@@ -159,11 +159,22 @@ the two.
 | EDF, NumPy | — | round-trip only |
 | KCD | 286 | pixels and checksum; **525 of 525 header entries identical** |
 | Xcalibur | — | struct parsing agrees with FabIO's own `CcdCharacteristiscs.read`, which its image reader never calls |
-| **Netpbm, R-AXIS, SPE, Fit2D binary, Fit2D mask, MPA, DM3, OXD** | **none** | **round-trip only** |
+| R-AXIS | 1 | pixels against FabIO |
+| OXD | 4 | pixels against FabIO; TY1 checked against an uncompressed twin of the same image |
+| DM3 | 1 | 2048² Float32, pixels against FabIO |
+| SPE | 3 | one-frame, two-frame and cropped; pixels against FabIO |
+| Fit2D binary | 2 | pixels against FabIO — and these settled the byte order |
+| Fit2D mask | 2 | pixels against FabIO, including a 123×456 non-word-aligned mask |
+| MPA | 1 | pixels against FabIO — this one found a bug |
+| **Netpbm** | **none** | **round-trip only** |
 
-The eight in the last row rest entirely on this package's own writers. For `.f2d` that gap
-matters most, because FabIO's reader is wrong in three places (below), so there is no sound
-reference to check against — a real `.f2d` is what would settle its byte order.
+Netpbm is the only reader left resting entirely on this package's own writer, and it is the
+one where that matters least: the format is a header of four fields and a raster, and any
+`netpbm` or ImageMagick tool writes an independent fixture in one command.
+
+Those real files came from the archive FabIO's own test suite downloads,
+`http://www.edna-site.org/pub/fabio/testimages`. Three small ones are committed here (see
+`test/data/fabio/PROVENANCE.md`); the rest are opt-in through `FABIO_JL_FABIOTEST`. 
 
 ## Defects found in FabIO along the way
 
@@ -197,7 +208,11 @@ are why a comparison had to be done indirectly.
   of the scan resuming.
 - **Fit2D byte order.** `i` and `r` arrays are decoded in the machine's native order while `l`
   masks are decoded big-endian, in the same function, so the same file gives different pixels on
-  different machines.
+  different machines. Real files show little-endian is right for the arrays, which is what this
+  package now does; on a big-endian machine FabIO would misread them.
+- **SPE frame count.** `SpeImage` never sets `_nframes`, so a two-frame file reports
+  `nframes = 1` while its own header says `num_frames = 2`. Both frames are readable through
+  `fabio.open(path, frame=n)`.
 
 ## Licence
 

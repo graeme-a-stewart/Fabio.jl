@@ -22,8 +22,12 @@ An INI-style text header, then the values:
 
 Section names prefix the keys beneath them, so `range` under `[ADC1]` becomes `ADC1_range`;
 keys before any section keep their bare names. `ADC1_range` is the slow axis and `ADC2_range`
-the fast one. The values follow the `[CDAT…]` (or `[DATA…]`) marker, one decimal number per
-line, and are read as `Float64` to match FabIO.
+the fast one, one decimal number per line, read as `Float64` to match FabIO.
+
+A file typically holds several blocks: a `[DATA…]` block per ADC, each a one-dimensional
+spectrum, followed by a `[CDAT…]` block holding the two-dimensional coincidence map. **The
+image is the `[CDAT…]` block**, so the earlier ones are skipped — taking the first marker
+found gives a 1024-value spectrum where a 1024×1024 image was wanted.
 
 Despite the `mpafmt` key, FabIO parses the values as text either way — its "binary" branch
 reopens the file in binary mode and still splits it into lines and parses them as floats — so
@@ -68,29 +72,43 @@ function scan(::MPA, src::AbstractSource)
     h = Header()
     section = ""
     dataoffset = -1
+    fallback = -1
+    inheader = true
     pos = 1
     while pos <= ncodeunits(text)
         nl = findnext('\n', text, pos)
         stop = nl === nothing ? ncodeunits(text) : nl - 1
         line = strip(text[pos:stop])
         nextpos = nl === nothing ? ncodeunits(text) + 1 : nl + 1
-        if startswith(line, "[DATA") || startswith(line, "[CDAT")
+        if startswith(line, "[CDAT")
+            # The coincidence block is the image. Any [DATA…] blocks before it are
+            # one-dimensional per-ADC spectra, so they are skipped rather than read.
             h["DataMarker"] = String(line)
             dataoffset = nextpos - 1        # 0-based offset of the first value
             break
-        elseif occursin('=', line)
+        elseif startswith(line, "[DATA")
+            # Header parsing ends here, but the image may still be further down.
+            haskey(h, "FirstDataMarker") || (h["FirstDataMarker"] = String(line))
+            fallback < 0 && (fallback = nextpos - 1)
+            inheader = false
+        elseif inheader && occursin('=', line)
             i = findfirst('=', line)
             key = String(strip(line[1:prevind(line, i)]))
             val = String(strip(line[nextind(line, i):end]))
             isempty(key) || (h[isempty(section) ? key : section * "_" * key] = val)
-        elseif startswith(line, "[")
+        elseif inheader && startswith(line, "[")
             section = String(strip(line, ['[', ']']))
         end
         pos = nextpos
     end
 
-    dataoffset < 0 &&
-        throw(CorruptFileError("MPA: no [DATA…] or [CDAT…] marker, so no pixel data"))
+    if dataoffset < 0
+        # A file with only [DATA…] blocks and no [CDAT…]: take the first one.
+        fallback < 0 &&
+            throw(CorruptFileError("MPA: no [DATA…] or [CDAT…] marker, so no pixel data"))
+        dataoffset = fallback
+        h["DataMarker"] = h["FirstDataMarker"]
+    end
 
     slow = getheader(h, "ADC1_range", Int, 0)
     fast = getheader(h, "ADC2_range", Int, 0)

@@ -29,14 +29,17 @@ for `Float32`, and `l` for a bit mask packed 31 pixels to an `Int32` — see
 
 The format does not record its own byte order, and FabIO is inconsistent about it: it decodes
 `i` and `r` arrays with numpy's **native** order, but `l` masks explicitly as big-endian, in the
-same function. Native order cannot be right — the same file would then read differently on
-different machines — so the deliberate big-endian branch is the better evidence of what the
-format intends, and is the default here. `Fit2D{:little}` reads the other way for anyone whose
-files disagree:
+same function.
 
-    Fabio.openimage(path; format = Fit2D{:little}())
+Real files settle it: `.f2d` arrays are **little-endian**. Read as big-endian, FabIO's own test
+files come back as denormals — `fit2d.f2d` gives a maximum of 1.8e-38 where it should give 1793
+— so that is the default here. `Fit2D{:big}` remains available:
 
-The scalar `i` and `r` fields are hexadecimal text and so are unaffected either way.
+    Fabio.openimage(path; format = Fit2D{:big}())
+
+Whether FabIO's big-endian `l` mask branch is right for masks specifically is untested, since
+no file of that kind was to hand. The scalar `i` and `r` fields are hexadecimal text and are
+unaffected either way.
 
 # Two further divergences from FabIO
 
@@ -51,7 +54,7 @@ had already read, rather than resuming the scan. This reader restarts the scan p
 """
 struct Fit2D{Order} <: ImageFormat end
 
-Fit2D() = Fit2D{:big}()
+Fit2D() = Fit2D{:little}()
 
 const FIT2D_BLOCK = 512
 const FIT2D_PIXELS_PER_CHUNK = 128
@@ -135,7 +138,7 @@ function scan(::Fit2D{Order}, src::AbstractSource) where {Order}
     n = filesize(src)
     h = Header()
     h["BlockSize"] = block
-    h["ByteOrder"] = Order === :little ? "LowByteFirst" : "HighByteFirst"
+    h["ByteOrder"] = Order === :big ? "HighByteFirst" : "LowByteFirst"
     imagespec = nothing
 
     pos = 0
@@ -169,11 +172,11 @@ function scan(::Fit2D{Order}, src::AbstractSource) where {Order}
             pos + nbytes > n &&
                 throw(TruncatedFileError("Fit2D: array $key wants $nbytes bytes past $pos"))
 
-            bo = Order === :little ? LittleEndian() : BigEndian()
+            bo = Order === :big ? BigEndian() : LittleEndian()
             T, codec = if arraytype == 'i'
-                (Int32, Fit2DChunked(block, min(FIT2D_PIXELS_PER_CHUNK, block ÷ 4), Order !== :little))
+                (Int32, Fit2DChunked(block, min(FIT2D_PIXELS_PER_CHUNK, block ÷ 4), Order === :big))
             elseif arraytype == 'r'
-                (Float32, Fit2DChunked(block, min(FIT2D_PIXELS_PER_CHUNK, block ÷ 4), Order !== :little))
+                (Float32, Fit2DChunked(block, min(FIT2D_PIXELS_PER_CHUNK, block ÷ 4), Order === :big))
             elseif arraytype == 'l'
                 (UInt8, Fit2DBitmask())
             else
@@ -230,7 +233,7 @@ marker and any scalar records given. `Int32` and `Float32` arrays are supported.
 function writefit2d(
     path::AbstractString,
     A::AbstractArray{T,2};
-    bigendian::Bool = true,
+    bigendian::Bool = false,
     strings = Dict{String,String}(),
     integers = Dict{String,Int}(),
     reals = Dict{String,Float64}(),

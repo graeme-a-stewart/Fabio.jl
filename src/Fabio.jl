@@ -186,7 +186,7 @@ function registerdefaults!()
         writer = false,
     )
     register!(
-        Fit2D{:big}();
+        Fit2D{:little}();
         name = :fit2d,
         description = "Fit2D binary (record-structured)",
         extensions = ["f2d"],
