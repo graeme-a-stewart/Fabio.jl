@@ -62,7 +62,8 @@ function detectformat(
             for e in REGISTRY
                 e.reader || continue
                 if ext in e.extensions
-                    return refine(e.format, head, path, src)
+                    fmt = refine(e.format, head, path, src)
+                    fmt === nothing || return fmt
                 end
             end
         end

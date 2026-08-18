@@ -26,6 +26,7 @@ struct MmapSource <: AbstractSource
     buf::Vector{UInt8}
     path::String
     io::IOStream
+    fragment::Union{Nothing,String}
 end
 
 """
@@ -36,6 +37,7 @@ Bytes already in memory: a decompressed file, or an in-memory stream.
 struct BufferSource <: AbstractSource
     buf::Vector{UInt8}
     path::Union{Nothing,String}
+    fragment::Union{Nothing,String}
 end
 
 const _RASource = Union{MmapSource,BufferSource}
@@ -44,6 +46,18 @@ Base.filesize(src::_RASource) = length(src.buf)
 israndomaccess(::_RASource) = true
 sourcepath(src::MmapSource) = src.path
 sourcepath(src::BufferSource) = src.path
+
+"""
+    sourcefragment(src) -> Union{Nothing,String}
+
+The part of the path after a `::` separator, or `nothing`.
+
+FabIO addresses a dataset inside an HDF5 container as `filename::/group/dataset`, and makes
+the separator mandatory for its flat HDF5 reader. Carrying the fragment on the source keeps
+[`scan`](@ref)'s signature unchanged: a format that needs an in-file address reads it from
+here, and every other format never sees it.
+"""
+sourcefragment(src::_RASource) = src.fragment
 
 """
     bytes(src, offset, n) -> AbstractVector{UInt8}
@@ -92,6 +106,19 @@ function stripcompression(path::AbstractString)
 end
 
 """
+    splitfragment(path) -> (file, fragment)
+
+Split a `filename::/group/dataset` container reference. `fragment` is `nothing` when there is
+no `::` separator. Two colons are required, so a Windows drive letter is never mistaken for
+one.
+"""
+function splitfragment(path::AbstractString)
+    i = findfirst("::", String(path))
+    i === nothing && return (String(path), nothing)
+    return (String(path[1:first(i)-1]), String(path[last(i)+1:end]))
+end
+
+"""
     decompress(suffix, raw) -> Vector{UInt8}
 
 Decompress a whole file held in `raw`. `.gz` is supported by the core; the remaining
@@ -130,18 +157,19 @@ one is decompressed once into a [`BufferSource`](@ref). This is where FabIO's
 every source in this version is randomly addressable.
 """
 function opensource(path::AbstractString; mmap::Bool = true)
-    isfile(path) || throw(ArgumentError("no such file: $path"))
-    _, sfx = stripcompression(path)
+    file, fragment = splitfragment(path)
+    isfile(file) || throw(ArgumentError("no such file: $file"))
+    _, sfx = stripcompression(file)
     if isempty(sfx)
         if mmap
-            io = Base.open(path, "r")
+            io = Base.open(file, "r")
             buf = Mmap.mmap(io, Vector{UInt8}, filesize(io))
-            return MmapSource(buf, String(path), io)
+            return MmapSource(buf, file, io, fragment)
         else
-            return BufferSource(Base.read(path), String(path))
+            return BufferSource(Base.read(file), file, fragment)
         end
     end
-    return BufferSource(decompress(sfx, Base.read(path)), String(path))
+    return BufferSource(decompress(sfx, Base.read(file)), file, fragment)
 end
 
 """
@@ -149,7 +177,7 @@ end
 
 Wrap an in-memory buffer, e.g. bytes received over a network.
 """
-opensource(buf::Vector{UInt8}) = BufferSource(buf, nothing)
+opensource(buf::Vector{UInt8}) = BufferSource(buf, nothing, nothing)
 
 # --------------------------------------------------------------- byte scanning
 

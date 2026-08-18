@@ -89,6 +89,7 @@ include("formats/kcd.jl")
 include("formats/mar345.jl")
 include("formats/mpa.jl")
 include("formats/mrc.jl")
+include("formats/nexus.jl")
 include("formats/oxd.jl")
 include("formats/pnm.jl")
 include("formats/raxis.jl")
@@ -97,7 +98,7 @@ include("formats/npy.jl")
 include("formats/tiff.jl")
 include("formats/xcalibur.jl")
 
-export Bruker, CBF, DM3, Dtrek, EDF, OXD, Xcalibur, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NPY, PNM, Raxis, SPE, TIFFLike
+export Bruker, CBF, DM3, Dtrek, EDF, OXD, Xcalibur, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NexusLike, NPY, PNM, Raxis, SPE, TIFFLike
 
 """
     registerdefaults!()
@@ -287,6 +288,20 @@ function registerdefaults!()
         # table, below even EDF's bare brace, since it is the least selective signature here.
         magic = [Magic("ADEPT"), Magic(zeros(UInt8, 10))],
         priority = -2,
+        writer = false,
+    )
+    # One entry for the whole HDF5 family. Which member a file actually is cannot be told
+    # from its first bytes — every one of them starts with the same eight — so `refine` opens
+    # the file and looks at its structure, and that method lives in the HDF5 extension. With
+    # the extension unloaded the family still resolves here, and `scan` then explains what to
+    # load. FabIO instead encodes the family as the magic-table string
+    # "eiger/lima/sparse/hdf5/lambda" and unpicks it with a branch inside its detection loop.
+    register!(
+        NexusLike{:unknown}();
+        name = :hdf5,
+        description = "HDF5 / NeXus (Eiger, LImA, Lambda, sparsify-Bragg)",
+        extensions = ["h5", "hdf5", "nxs"],
+        magic = [Magic(HDF5_MAGIC)],
         writer = false,
     )
     register!(

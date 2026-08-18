@@ -207,7 +207,7 @@ function openimage(
 )
     src = opensource(path; mmap = mmap)
     try
-        return _openimage(src, String(path), format, mmap, strict)
+        return _openimage(src, sourcepath(src), format, mmap, strict)
     catch
         close(src)
         rethrow()
