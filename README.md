@@ -1,5 +1,13 @@
 # Fabio.jl
 
+**Warning** - This Julia library is under development and has not yet been
+thoroughly tested. Many tests on synthetic and real data have been done, as
+well as comparison with the `fabio` Python library. However, if you use this
+library you are advised to make a through validation check on your data (please
+raise an issue, if you find a problem).
+
+## Introduction
+
 Reading of 2D detector images and their metadata, after the Python
 [FabIO](https://github.com/silx-kit/fabio) library. Give it a filename: it works out the
 format, handles compression, and hands back the pixels as a Julia array of the type actually
