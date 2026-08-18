@@ -927,16 +927,43 @@ padding, §4.3) that tool becomes straightforward to port later.
 | **0** ✅ | Core: types, sources, compression, registry, detection, blob reader, `RawBlob`, `ZlibBlob`. Formats: **EDF**, **Esperanto** (+`AGIBitfield`), `.npy`. **Built and tested** — 168 self-contained tests plus 22 against real Esperanto data. | EDF exercises multi-frame, per-frame headers, endianness, zlib blobs, `.gz`. Esperanto adds a real codec validated against your 140 files. Together they proved tier 1. |
 | **1** ✅ | `ByteOffset` + **CBF**; `PCK` + **mar345**; the **TIFF family** (plain, Pilatus, MarCCD) in the core rather than an extension; **ADSC/d\*TREK**, **Bruker 86 and 100**. | Done. TIFF turned out to be mostly tier 1 — see the note below — and multi-strip TIFF is what exercises tier 2. |
 | **2** ✅ | **OXD** (TY1, TY5), **GE**, **Netpbm**, **MRC**, **SPE**, **Fit2D** binary and mask, **KCD**, **R-AXIS**, **MPA**, **DM3**, **Xcalibur**. | Done, all tier 1. Xcalibur had no reader in FabIO to port — its `read` is unmodified template boilerplate that raises — so this one is new work rather than a translation. |
-| **3** ⬅ next | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | The first real use of the weak-dependency design, and the first family that genuinely needs tier 2, since an HDF5 dataset is not a byte range. |
-| **4** | Writers, `convert`/`coerce` matrix, `FileSeries`, FileIO.jl registration, `ImageMetadata`, `fabio-convert` CLI. | Parity polish. |
+| **3** ✅ | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | Done. The weak-dependency design and tier 2 both worked as written; see below. |
+| **4** ⬅ next | Writers, `convert`/`coerce` matrix, `FileSeries`, FileIO.jl registration, `ImageMetadata`, `fabio-convert` CLI. | Parity polish. |
+
+**What phase 3 confirmed.** This was the phase the two-tier design existed for, and it needed
+no new mechanism. `refine` returning a more specific format — added in phase 2 so SPE could
+decline a file — is exactly what resolves the five HDF5 flavours, which FabIO handles with the
+magic-table string `"eiger/lima/sparse/hdf5/lambda"` and a branch inside its detection loop.
+`openstate`/`closestate`, speculated in §5 with "an HDF5 handle" as the example, holds an HDF5
+handle. The weak dependency behaves as §12 describes, error message included.
+
+Three things were better than predicted. The axis choice of §7 pays off a second time and for
+a second reason: HDF5.jl reverses a dataset's dimensions when mapping C-order storage into a
+column-major language, so a stack arrives as `(fast, slow, nframes)` — already this
+package's convention — and the sparse format's peak list, which indexes the C-order raveled
+image, is by the same token already a Julia linear index. Neither reader contains a transpose.
+Second, `scan` never needed access to the state: it opens the file, enumerates, and closes,
+and `openstate` opens it again to read from. Third, the `::` fragment fitted on the *source*
+rather than in `scan`'s signature, so the tier-1 contract was untouched.
+
+One correction to §8. It claims that after `openimage` "everything after is inferred:
+`file[i] :: ImageFrame{T,2,Array{T,2}}`". That is not true for a tier-2 format, and never was:
+a frame descriptor is reached through `ImageFile.frames::Vector{FrameSpec}`, whose parameter
+is abstract, so the element type is recovered at run time. The cost is one dispatch per frame
+against reading a whole frame, which is why it has not mattered — but the claim is too strong
+as written.
 
 **What the first three phases changed about this design.** Two predictions in §3 and §5 were
 wrong in interesting ways. TIFF was expected to be the tier-2 exercise; it is not, because a
 contiguous image — even a multi-strip one — is still a single `BinaryLayout`, so only genuinely
 disjoint strips need `readframe`. "Offset plus codec" describes more formats than this document
-predicted, and 21 of 23 formats are tier 1. Separately, a magic match had to stop being final:
-SPE has no signature and a header of mostly zeros, so it collided with GE's blanked-header
-signature, and `refine` now returns `nothing` to decline a file and let detection continue.
+predicted. Of the 24 registered formats, only two families read their own pixels: TIFF, and
+then only for a genuinely multi-strip image, and HDF5, throughout — the latter because an HDF5
+dataset is not bytes at an offset at all. Everything else is tier 1.
+
+Separately, a magic match had to stop being final: SPE has no signature and a header of mostly
+zeros, so it collided with GE's blanked-header signature, and `refine` now returns `nothing` to
+decline a file and let detection continue.
 
 See [STATUS.md](STATUS.md) for where the work actually stands, the open questions, and how to
 run the real-data tests.

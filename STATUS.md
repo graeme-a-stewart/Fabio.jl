@@ -1,29 +1,27 @@
 # Status and handover
 
-Written at the close of Phase 2, as a place to pick the work up from. [README.md](README.md)
+Written at the close of Phase 3, as a place to pick the work up from. [README.md](README.md)
 is the user-facing description and [DESIGN.md](DESIGN.md) the architecture; this file is the
 working state that lives in neither.
 
 ## Where things stand
 
-23 formats, all reading, two also writing. Phases 0, 1 and 2 of the roadmap in `DESIGN.md` are
-complete. `git log` is 26 commits, the working tree is clean, and the last commit is
-`c8a3f20`.
+28 readers across 24 registry entries, two of them also writing. Phases 0 through 3 of the
+roadmap in `DESIGN.md` are complete.
 
 | | |
 |---|---|
-| source | ~6900 lines across `src/` |
-| tests | ~4100 lines, **869 assertions** in the self-contained suite |
+| source | ~7000 lines across `src/`, ~800 more in `ext/` |
+| tests | ~4500 lines, **948 assertions** in the self-contained suite |
 | committed fixtures | 228 KB across `test/data/{fabio,netpbm,tiff}` |
 | opt-in real-data assertions | several thousand more, depending on which datasets are present |
 
-Read-only: bruker, bruker100, cbf, dm3, dtrek, edf, esperanto, fit2d, ge, kcd, mar345, mpa,
-mrc, npy, oxd, pilatus, pnm, raxis, spe, tiff, xcalibur. Read and write: fit2dmask, marccd.
+Read-only: bruker, bruker100, cbf, dm3, dtrek, edf, esperanto, fit2d, ge, hdf5 (eiger, lima,
+lambda, sparse, generic), kcd, mar345, mpa, mrc, npy, oxd, pilatus, pnm, raxis, spe, tiff,
+xcalibur. Read and write: fit2dmask, marccd.
 
 **Every reader has been checked against files this package did not write.** The table in
-README.md says what each was checked against; the short version is that nine were checked
-against real detector data supplied by the user, seven against FabIO's test archive, and the
-rest against tifffile, the netpbm toolkit, or FabIO in both directions.
+README.md says what each was checked against.
 
 ## Running the tests
 
@@ -31,7 +29,8 @@ rest against tifffile, the netpbm toolkit, or FabIO in both directions.
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-That is self-contained. The real-data testsets are opt-in, and on this machine the data is at:
+That is self-contained — the HDF5 fixtures are written by the suite itself with HDF5.jl. The
+real-data testsets are opt-in, and on this machine the data is at:
 
 ```bash
 FABIO_JL_LOCAL_TESTDATA=/Users/graemes/code/ansible-kafka/data/202607_compression_test/01_enstatite_data \
@@ -45,6 +44,16 @@ FABIO_JL_KCD_TESTDATA=/Users/graemes/code/ansible-kafka/data/KCD_data/zenodo.259
 FABIO_JL_HEXRD_EXAMPLES=/Users/graemes/code/ansible-kafka/data/GE_data/examples \
 FABIO_JL_FABIOTEST=/path/to/downloaded/fabio/testimages \
   julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+`FABIO_JL_HEXRD_EXAMPLES` now drives the real HDF5 tests as well as the GE ones. Comparing
+pixels in the real Eiger file needs its bitshuffle filter, which is not a test dependency:
+without `H5Zbitshuffle` installed the suite checks the file's structure, asserts that the read
+fails naming the filter, and logs that the pixels were not compared. With it, that testset goes
+from 23 assertions to 31. To run it that way:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.add("H5Zbitshuffle")'
 ```
 
 `FABIO_JL_FABIOTEST` needs the archive fetched first — it is not on this machine permanently:
@@ -66,19 +75,46 @@ The pattern throughout has been to compare against the Python FabIO reading the 
 an ephemeral environment so nothing is installed permanently:
 
 ```bash
-uv run --quiet --with fabio --with numpy python3 -c "import fabio; ..."
+uv run --quiet --with fabio --with numpy --with h5py python3 -c "import fabio; ..."
 ```
 
-Set `UV_HTTP_TIMEOUT=300`; the default 30 s is not enough for its dependencies.
+Set `UV_HTTP_TIMEOUT=300`; the default 30 s is not enough for its dependencies. The version
+validated against in Phase 3 was FabIO 2026.6.0.
 
 Two habits worth keeping. Compare with a **position-sensitive checksum** — the sum of each value
 times its flat index — as well as minimum, maximum and sum, because a transposition or a
-reordered strip leaves all three aggregates unchanged. And **generate expected values from the
-reference implementation** rather than typing them; every time they were typed by hand in this
-work they were wrong, and in every such case the reader already agreed with FabIO.
+reordered strip leaves all three aggregates unchanged. For the Eiger frames this is done in
+`BigInt` on both sides, so there is no floating-point slack at all. And **generate expected
+values from the reference implementation** rather than typing them; every time they were typed
+by hand in this work they were wrong, and in every such case the reader already agreed with
+FabIO.
+
+For HDF5 specifically, `FABIO_JL_H5_FIXTURE_DIR` makes `test_hdf5.jl` write its fixtures to a
+stable directory instead of a temporary one, which is how they were handed to FabIO. That is
+the reproducible route back to the cross-check:
+
+```bash
+FABIO_JL_H5_FIXTURE_DIR=/tmp/h5fix julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+FabIO reads seven of those fixtures and agrees on all 22 frames — but only through
+`fabio.open(path, frame=n)`, because the elder Eiger layout cannot be opened any other way, and
+only for the flavours whose detection does not depend on string attributes. LImA and sparse were
+cross-checked against h5py-written fixtures instead; see the string-attribute defect in the
+README. That asymmetry is a property of FabIO, not of the fixtures.
 
 ## Open questions
 
+- **No `*_master.h5` file was available.** The Eiger reader is validated against a data file
+  with `/entry/data/data` directly. A master file reaches its data through external links and
+  virtual datasets, and while HDF5 resolves both transparently — so the reader needs no code for
+  it — that has not been *demonstrated* here. FabIO's archive has `sample_water0000.h5`, used by
+  its own tutorial, which would settle it.
+- **No real LImA, Lambda or sparse file** was available either; all three are validated against
+  fixtures only, though sparse is checked against FabIO's own densify output.
+- **The noisy sparse path is untestable against FabIO.** `densify(...; noisy = true)` redraws
+  the background from a normal distribution, and Julia and numpy draw from different generators.
+  It is implemented and documented as not bit-comparable.
 - **OXD TY5 row reset.** FabIO restarts a row every `NY` pixels, using the slow dimension where
   the row length is the fast one; this package restarts every `NX`. The only TY5 file available
   is 1024 square, so it cannot separate the two. A non-square TY5 file would settle it.
@@ -95,31 +131,42 @@ work they were wrong, and in every such case the reader already agreed with FabI
 - **Tiled TIFF** is refused with a clear message but not implemented, as is **BigTIFF**.
 - **Compressed TIFF** (LZW, PackBits, Deflate) is not implemented; compression is per strip, so
   such files are also multi-strip.
+- **The extension-absent path is not tested automatically**, because `Pkg.test()` always has
+  HDF5 available. It was verified by hand, and is worth a subprocess test if it is to stay
+  honest:
+
+  ```bash
+  julia --project=. -e 'using Fabio; Fabio.openimage("some.h5")'
+  # UnsupportedFormatError: file "some.h5" is HDF5; run `using HDF5` to enable this reader
+  ```
 
 ## What is next
 
-Phase 3 is the HDF5 family — Eiger, Lima, Lambda, sparse and generic NeXus — through a package
-extension on `HDF5.jl`. That is the first real exercise of the weak-dependency design in
-`Project.toml`, and the first format family that genuinely needs tier 2 (`readframe`), since an
-HDF5 dataset cannot be described as a byte range. `test/data/` has no HDF5 fixtures; the hexrd
-examples tree at `FABIO_JL_HEXRD_EXAMPLES` contains several `.h5` files, and FabIO's archive has
-`sample_water0000.h5` used by its own tutorial.
+Phase 4, the parity polish: writers for the formats that lack them, the `coerce` matrix,
+`FileSeries`, FileIO.jl registration, `ImageMetadata`, and a `fabio-convert` equivalent. Of
+these, `FileSeries` is the one the design has the most to say about — §4.2 drops FabIO's
+ambiguous `next()` in favour of `open_series`, and §16.5–16.7 are written against it.
 
-Phase 4 is the parity polish: writers for the formats that lack them, the `coerce` matrix,
-`FileSeries`, FileIO.jl registration, `ImageMetadata`, and a `fabio-convert` equivalent.
-
-Also outstanding, smaller: the use-case suite in `DESIGN.md` §16 — every example from the FabIO
-documentation translated to Julia — was specified but never written as `test/usecases.jl`.
+Also outstanding, and now the last piece of the acceptance criteria: the use-case suite in
+`DESIGN.md` §16 — every example from the FabIO documentation translated to Julia — was
+specified but never written as `test/usecases.jl`. §16.9 and §16.10 are HDF5 examples and are
+newly runnable as of this phase.
 
 ## Process notes
 
-Two mistakes were made repeatedly in this work and are worth not repeating.
+Three mistakes were made repeatedly in this work and are worth not repeating.
 
 **Scripted edits that fail silently.** Several commits claimed README changes that never
 happened, because they used Python `str.replace`, which returns the text unchanged when the
 anchor does not match and reports nothing. Use `Edit`, which fails loudly, or assert the anchor
-matched before writing. The same failure hid a missing `include` in `runtests.jl` for a whole
-commit, so 36 tests that were claimed had never run.
+matched before writing — `perl -0777 -i -pe '$n += s{...}{...}; die unless $n == 1'` does that
+and was used throughout Phase 3. The same failure hid a missing `include` in `runtests.jl` for a
+whole commit, so 36 tests that were claimed had never run.
+
+**Interpolation eaten by the editing tool.** The flip side of the above: a perl replacement is
+double-quoted, so `$file` and `@ref` inside the *replacement* text vanish silently. They must be
+escaped. This produced two broken strings in Phase 3 that were caught only by reading the result
+back, which is the argument for printing the changed region after every edit.
 
 **Numbers written from memory.** Reference values, test counts and totals were more than once
 stated without measuring. Measure them.
