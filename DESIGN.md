@@ -807,7 +807,9 @@ pyplot.imshow(img.data); pyplot.show()
 ```
 ```julia
 using GLMakie
-heatmap(Fabio.imageview(frame))        # imageview handles the (row, col) convention
+# Makie's first array axis is x, so the stored (fast, slow) order needs no permutation;
+# yreversed puts the origin top-left, where matplotlib's imshow has it.
+heatmap(frame; axis = (yreversed = true, aspect = DataAspect()))
 ```
 
 ### 16.5 File series, the doc's mar2300 example (Zenodo 2546760)

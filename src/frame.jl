@@ -88,7 +88,10 @@ rowmajor(a::AbstractMatrix) = PermutedDimsArray(a, (2, 1))
     imageview(frame)
 
 A zero-copy view in `(row, col)` order with a top-left origin, matching the convention used by
-Images.jl and by plotting packages' `heatmap`.
+Images.jl and by matplotlib's `imshow`.
+
+Makie is not one of these: its first array axis is x, so `heatmap(frame)` and `image(frame)`
+take the frame itself, unpermuted, and `imageview` would transpose the picture.
 """
 imageview(f::ImageFrame{T,2}) where {T} = rowmajor(f)
 imageview(a::AbstractMatrix) = rowmajor(a)
