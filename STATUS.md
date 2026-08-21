@@ -6,8 +6,8 @@ working state that lives in neither.
 
 ## Where things stand
 
-28 readers across 24 registry entries, two of them also writing. Phases 0 through 3 of the
-roadmap in `DESIGN.md` are complete.
+**Status: Phase 3 complete.** 28 readers across 24 registry entries. Phases 0 through 3 of the
+roadmap in `DESIGN.md` are complete; Phase 4 is next.
 
 | | |
 |---|---|
@@ -18,10 +18,12 @@ roadmap in `DESIGN.md` are complete.
 
 Read-only: bruker, bruker100, cbf, dm3, dtrek, edf, esperanto, fit2d, ge, hdf5 (eiger, lima,
 lambda, sparse, generic), kcd, mar345, mpa, mrc, npy, oxd, pilatus, pnm, raxis, spe, tiff,
-xcalibur. Read and write: fit2dmask, marccd.
+xcalibur. Fifteen formats also have a `write*` function, though only marccd and fit2dmask
+declare `writer = true` in the registry; the rest were written to give the reader tests a
+fixture, and the unified `Fabio.write`/`convert` API is Phase 4. See the README.
 
-**Every reader has been checked against files this package did not write.** The table in
-README.md says what each was checked against.
+**Every reader has been checked against files this package did not write.**
+[docs/validation.md](docs/validation.md) says what each was checked against.
 
 ## Running the tests
 

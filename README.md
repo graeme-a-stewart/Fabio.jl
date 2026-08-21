@@ -13,28 +13,31 @@ Reading of 2D detector images and their metadata, after the Python
 format, handles compression, and hands back the pixels as a Julia array of the type actually
 stored in the file, alongside the header.
 
-**Status: Phase 3 complete.** Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC, DM3,
-EDF, Esperanto, Fit2D (binary and mask), GE, HDF5/NeXus (Eiger, LImA, Lambda and
-sparsify-Bragg), KCD, mar345, MPA, MRC, Netpbm, OXD, R-AXIS, SPE, TIFF (plain, Pilatus and
-MarCCD), Xcalibur and NumPy. See [DESIGN.md](DESIGN.md) for the full architecture and the
-format roadmap.
+Readers exist for Bruker (86 and 100), CBF, d\*TREK/ADSC, DM3, EDF, Esperanto, Fit2D (binary
+and mask), GE, HDF5/NeXus (Eiger, LImA, Lambda and sparsify-Bragg), KCD, mar345, MPA, MRC,
+Netpbm, OXD, R-AXIS, SPE, TIFF (plain, Pilatus and MarCCD), Xcalibur and NumPy. Fifteen of
+them can also be written. See [DESIGN.md](DESIGN.md) for the architecture and the format
+roadmap, and [STATUS.md](STATUS.md) for where the work currently stands.
 
 ```julia
 using Fabio, Statistics
 
 frame = Fabio.readimage("image.edf")
-mean(frame)                                       # an ImageFrame is an AbstractArray
+mean(frame)                              # an ImageFrame is an AbstractArray
 maximum(frame)
-getheader(header(frame), "ESRFCurrent", Float64)  # typed header access
 
-Fabio.openimage("series.edf") do file             # multi-frame files are AbstractVectors
+hdr = header(frame)                      # a dictionary of the metadata
+hdr["Dim_1"]                             # "2048" — as recorded, so a String here
+getheader(hdr, "ESRFCurrent", Float64)   # 200.567 — found and converted in one step
+
+Fabio.openimage("series.edf") do file    # multi-frame files are AbstractVectors
     length(file)
     for f in file
         println(f.fileindex, ": ", maximum(f))
     end
 end
 
-Fabio.info("scan.esperanto")                      # a `fabio_info`-style dump
+Fabio.info("scan.esperanto")             # a `fabio_info`-style dump
 ```
 
 ## What is here
@@ -58,6 +61,60 @@ possible at all. `Fabio.rowmajor(frame)` and `Fabio.imageview(frame)` give free 
 numpy and display conventions.
 
 Frame indices are 1-based, like everything else in Julia. FabIO counts from 0.
+
+## Headers
+
+A `Header` is an `AbstractDict{String,Any}`, so it indexes, iterates and `haskey`s like any
+dictionary:
+
+```julia
+hdr = header(frame)
+hdr["Dim_1"]                 # "2048"
+haskey(hdr, "ByteOrder")
+for (k, v) in hdr            # insertion order, as recorded in the file
+    println(k, " = ", v)
+end
+```
+
+Values come back **exactly as the file stored them**, which is FabIO's contract too: what the
+reader interprets, it interprets into the frame's shape and type, and everything else is left
+alone. For the many formats with a text header, that means the values are `String`s.
+
+That is what `getheader` is for:
+
+```julia
+getheader(hdr, "ESRFCurrent", Float64)        # 200.567
+getheader(hdr, "ESRFCurrent", Float64, 0.0)   # ... or a default if it is missing
+```
+
+It is fair to ask why that is not just `Float64(hdr["ESRFCurrent"])`. Because that does not
+work — the stored value is a string, and there is no such conversion:
+
+```julia
+julia> hdr["ESRFCurrent"]
+"200.567"
+
+julia> Float64(hdr["ESRFCurrent"])
+ERROR: MethodError: no method matching Float64(::String)
+```
+
+`parse(Float64, hdr["ESRFCurrent"])` does work, and for a single known EDF key it is a perfectly
+good thing to write. `getheader` earns its place when you are not writing against one known
+key in one known format:
+
+- **It does not care whether the value is text or already a number.** Formats with a binary
+  header decode fields into real Julia numbers, and `parse` then fails — `parse(Float64, 1.5f0)`
+  is a `MethodError`. `getheader` returns `1.5` either way, so code that reads an exposure time
+  works across formats rather than for one of them.
+- **The lookup is case-insensitive.** Writers disagree about capitalisation within a single
+  format, so `hdr["esrfcurrent"]` is a `KeyError` where `getheader(hdr, "esrfcurrent", Float64)`
+  is not.
+- **A missing or malformed key is a `CorruptFileError` naming the key**, rather than a `KeyError`
+  or an `ArgumentError` from inside `parse`; and the four-argument form supplies a default
+  instead of throwing.
+
+Neither is preferred. Use `hdr[key]` to see what the file says, and `getheader` when you want a
+number out of it.
 
 ## HDF5
 
@@ -90,6 +147,47 @@ needs the second extension tier: it reads its own pixels rather than describing 
 `BinaryLayout`. It maps onto the axis order here exactly, though — HDF5 stores C-order, and
 HDF5.jl reverses the dimensions when mapping into a column-major language, so a stack stored
 as `(nframes, slow, fast)` arrives as `(fast, slow, nframes)` with no permutation at all.
+
+## Writing files
+
+Fifteen formats have a writer. They take a path and an array, and optionally a `Header`:
+
+```julia
+using Fabio: writeedf, writecbf, writetiff, writenpy
+
+A = rand(UInt16, 2048, 2048)                 # (fast, slow), as everywhere here
+
+writeedf("out.edf", A)                       # or writeedf(path, A, header)
+writecbf("out.cbf", A, header(frame))        # byte-offset compressed
+writenpy("out.npy", A)                       # numpy reads it with numpy.load
+writetiff("out.tif", A; description = "…")   # the tag a Pilatus header lives in
+```
+
+Some take several frames, writing a multi-frame file:
+
+```julia
+using Fabio: writemrc, writespe, writege
+writemrc("stack.mrc", [frame1, frame2, frame3])
+```
+
+The full list, all in `src/formats/`: `writebruker`, `writecbf`, `writedtrek`, `writeedf`,
+`writefit2d`, `writefit2dmask`, `writege`, `writekcd`, `writemarccd`, `writempa`, `writemrc`,
+`writenpy`, `writepnm`, `writespe`, `writetiff`. None is exported, so reach them as
+`Fabio.writeedf` or import them by name.
+
+**Be aware of what these are.** Most were written to give the reader tests a fixture that needs
+nothing downloaded, and their docstrings say so — "minimal single-frame EDF writer: enough to
+round-trip data". They write a correct file of the kind the matching reader expects, but they
+do not cover every option of every format. Only MarCCD and Fit2D mask are declared writers in
+the registry (`Fabio.formats()`), and MarCCD is the one whose output has been read back by
+FabIO to confirm it. A round trip through this package proves only that its reader and writer
+agree with each other.
+
+The unified writing API that `DESIGN.md` specifies — `Fabio.write(path, frame)` picking the
+format from the extension, `Fabio.convert(frame, EDF())`, and the `coerce` step that adapts an
+array to what a format can physically store — is Phase 4 and not yet built. `coerce` itself
+exists and is used: writing a Fit2D mask reduces any non-zero pixel to a bit, and Esperanto
+pads to a square whose side is a multiple of four.
 
 ## Adding a format
 
@@ -154,159 +252,15 @@ the file is checked either way.
 The mar345 files are the dataset the FabIO documentation uses for its file-series example,
 Zenodo [10.5281/zenodo.2546760](https://doi.org/10.5281/zenodo.2546760).
 
-## Performance
+## Further reading
 
-Measured on an 8-thread machine, against FabIO on the same files.
-
-Decoding one 2048² AGI bitfield frame (Esperanto):
-
-| | per frame |
+| | |
 |---|---|
-| FabIO — its AGI decoder is pure Python; the Cython extension only covers compression | 793 ms |
-| Fabio.jl, sequential | 9.7 ms |
-| Fabio.jl, row-indexed across 8 threads | 1.2 ms |
-
-Reading one 2300² PCK frame (mar345), end to end:
-
-| | per frame |
-|---|---|
-| FabIO, with its Cython PCK decoder | 612 ms |
-| Fabio.jl | 38 ms |
-
-The PCK comparison is the fairer of the two, since here FabIO is compiled rather than
-interpreted.
-
-The threaded path uses the per-row offset table stored at the end of every AGI blob. FabIO
-reads that table and discards it (`# read data components (row indices are ignored)`), which
-forces its decoder to walk rows strictly in order. Keeping it also lets each row's start be
-validated before use, and makes region-of-interest reads possible without decoding the whole
-frame.
-
-A full pass over 140 real files (2048², ~3.2 MB each) takes **0.99 s**.
-
-## What has been checked against real files
-
-Not every reader is equally trustworthy, and the difference is worth knowing before you rely on
-one. A round-trip through this package's own writer only shows that its reader and writer agree
-with each other; it says nothing about whether either matches the format. The table separates
-the two.
-
-| Reader | Real files | What was compared |
-|---|---|---|
-| Pilatus / TIFF | 72 | pixels and checksum; **1934 of 1934 header entries identical** |
-| MarCCD | 360 | pixels and checksum; all 19 binary-header fields; writer output read back by FabIO |
-| Bruker 100 | 22637 read, 151 vs FabIO | pixels and checksum; every correction path exercised |
-| Bruker 86 | 6 | pixels and checksum |
-| d\*TREK / ADSC | 1424 read, 119 vs FabIO | pixels and checksum; **3193 of 3193 header entries identical**; both byte orders |
-| MRC | 10 EMDB | pixels on the 8 FabIO can open; header settled against the data itself |
-| Esperanto | 140 | min, max, sum, mean, standard deviation and pixel values |
-| mar345 | 4 (Zenodo 2546760) | min, max, sum, mean, standard deviation and pixel values |
-| CBF | — | **bidirectional**: FabIO reads what this writes, and this reads what FabIO writes |
-| TIFF, multi-strip | 6 fixtures | written by [tifffile](https://github.com/cgohlke/tifffile); both strip layouts |
-| GE | 3 (hexrd examples) | pixels and checksum; the 6144 + 2048 split header; blanked-header geometry corroborated by a frame cache |
-| TIFF, `Float32` samples | 1 (hexrd examples) | pixels against FabIO |
-| EDF, NumPy | — | round-trip only |
-| KCD | 286 | pixels and checksum; **525 of 525 header entries identical** |
-| Xcalibur | — | struct parsing agrees with FabIO's own `CcdCharacteristiscs.read`, which its image reader never calls |
-| R-AXIS | 1 | pixels against FabIO |
-| OXD | 4 | pixels against FabIO; TY1 checked against an uncompressed twin of the same image |
-| DM3 | 1 | 2048² Float32, pixels against FabIO |
-| SPE | 3 | one-frame, two-frame and cropped; pixels against FabIO |
-| Fit2D binary | 2 | pixels against FabIO — and these settled the byte order |
-| Fit2D mask | 2 | pixels against FabIO, including a 123×456 non-word-aligned mask |
-| MPA | 1 | pixels against FabIO — this one found a bug |
-| Netpbm | 6 | written by the netpbm toolkit; checked against the source arithmetic and netpbm's own conversions |
-| HDF5, Eiger | 1 real, 3 fixtures | pixels, min, max, sum and an **exact integer** checksum; all three Eiger layouts |
-| HDF5, flat container | 1 real, 2 fixtures | pixels and checksum against FabIO, with and without the `::` separator |
-| HDF5, LImA and Lambda | 3 fixtures | pixels and the `detector` header field, against FabIO |
-| HDF5, sparsify-Bragg | 2 fixtures | densified frames compared with FabIO's own densify, pixel by pixel |
-
-**Every reader here has now been checked against files this package did not write.**
-
-The Netpbm fixtures come from the netpbm toolkit itself and are checked without reference to
-FabIO, which reads only P5 of the six: it rejects the plain P2 with "Size spec in pnm-header
-does not match size of image data" and fails on both bitmaps. The expected values are instead
-the arithmetic fed to netpbm, and netpbm's own conversions between the encodings, which have to
-decode identically.
-
-The HDF5 fixtures are written by the test suite itself and then handed to FabIO, which reads
-all seven and agrees on all 22 frames; the two real files are from the
-[hexrd](https://github.com/HEXRD/hexrd) examples tree. LImA and sparse are cross-checked
-against fixtures written by h5py rather than by this package, because FabIO cannot read the
-ones written from Julia at all — see the string-attribute defect below.
-
-Those real files came from the archive FabIO's own test suite downloads,
-`http://www.edna-site.org/pub/fabio/testimages`. Three small ones are committed here (see
-`test/data/fabio/PROVENANCE.md`); the rest are opt-in through `FABIO_JL_FABIOTEST`. 
-
-## Defects found in FabIO along the way
-
-Recorded because they affect anyone using FabIO for these formats, and because several of them
-are why a comparison had to be done indirectly.
-
-- **MRC header fields.** FabIO reads all 56 header words as `Int32` and names only the first
-  thirty, so the cell dimensions, density statistics and origin are meaningless and the `MAP`
-  stamp is looked for at word 27 instead of word 53. Its own check that `MAP` reads back as
-  `"MAP "` therefore never succeeds; it logs at info level and continues. This reader follows
-  MRC2014, which the files confirm: `DMIN`, `DMAX` and `DMEAN` are stored statistics of the
-  pixel data and agree with it to full float precision, and the cell angles read exactly 90°.
-- **MRC frame access.** `get_frame(n)` and `getframe(n)` raise `AttributeError` for any frame,
-  because both copy the deprecated `dim1` attribute onto a frame whose `data` is still `None`.
-  Only `fabio.open(path, frame=n)` works.
-- **MRC labels.** The ten 80-character labels are decoded as strict UTF-8, so two of the ten
-  EMDB files tested cannot be opened at all. This reader maps bytes to codepoints.
-- **MarCCD header.** `fabio.open` never exposes it. `TifImage.read` calls
-  `MarccdImage._readheader`, which parses the 3072-byte struct into `self.header`, and then
-  `_read_with_tiffio` overwrites `self.header` with the TIFF tags. Reaching the fields requires
-  calling `marccdimage.interpret_header` directly.
-- **Xcalibur cannot read anything.** `XcaliburImage.read` is the unmodified
-  `templateimage.py` boilerplate: it ignores the file, builds a 50×60 array and then raises
-  `AttributeError`, since the template's `self.uint16` is not an attribute. The struct
-  definitions and `CcdCharacteristiscs.loads` beside it are complete and correct — nothing
-  ever connected them to the reader.
-- **Fit2D reals.** `hex_to(stg, "float")` never looks at `stg`; it returns a hardcoded constant
-  of about 1e-4, so every real-valued field in every `.f2d` file reads back as the same number.
-- **Fit2D block size.** For files not written in 512-byte blocks, the larger size is worked out
-  and the file seeks back to the start, but the stale block already read is then parsed instead
-  of the scan resuming.
-- **Fit2D byte order.** `i` and `r` arrays are decoded in the machine's native order while `l`
-  masks are decoded big-endian, in the same function, so the same file gives different pixels on
-  different machines. Real files show little-endian is right for the arrays, which is what this
-  package now does; on a big-endian machine FabIO would misread them.
-- **Netpbm subformats.** In practice only P5 is readable: a plain P2 raises "Size spec in
-  pnm-header does not match size of image data", a packed P4 raises `ValueError` from parsing
-  binary as an integer, and a plain P1 raises "could not figure out what kind of pixels you
-  have". All three are read here.
-- **SPE frame count.** `SpeImage` never sets `_nframes`, so a two-frame file reports
-  `nframes = 1` while its own header says `num_frames = 2`. Both frames are readable through
-  `fabio.open(path, frame=n)`.
-- **The older Eiger layout cannot be opened.** `EigerImage.read` collects the `/entry/data_01`,
-  `data_02`, … datasets of the elder layout and then ends with
-  `self._data = self.dataset[0][self.currentframe, :, :]` — three indices into a 2-D dataset —
-  so `fabio.open` raises `ValueError: 3 indexing arguments for 2 dimensions` on exactly the
-  files that code path exists to serve. Only `fabio.open(path, frame=n)` works, which is the
-  same shape of defect as the MRC one above.
-- **HDF5 detection assumes variable-length string attributes.** `_do_magic` decides the family
-  with `str(creator).startswith("LIMA")`; when `creator` is stored as a *fixed-length* string
-  h5py hands back `bytes`, `str()` of which is `"b'LIMA…'"`, so the test fails and the file is
-  misdetected as Eiger. The Lambda branch of the same function decodes explicitly before
-  comparing and is unaffected — the fix is applied in one branch and not the others.
-- **The LImA reader breaks on those attributes too.** `LimaImage._readheader` calls
-  `nxdata.split("/")` on the entry's `default` attribute, raising
-  `TypeError: a bytes-like object is required, not 'str'` when it is fixed-length. Such a file
-  cannot be read even with the format forced, rather than merely being misdetected.
-- **The two densify implementations disagree.** For a sparsified frame, the Cython extension
-  fills masked pixels with the dummy and writes the peak list afterwards, so a peak recorded at
-  a masked pixel survives; the pure-numpy fallback writes the peaks first and then overwrites
-  them with the dummy, losing it. The same file gives different pixels depending on whether
-  FabIO's C extension was built. This package follows the Cython order, that being what a
-  normal install runs.
-- **densify has a dead no-background branch.** `if radius is None or background is None:
-  mean_2d = numpy.zeros(radius.shape, ...)` reads `radius.shape` in the branch entered when
-  `radius is None`, so a sparse file carrying no radial background raises
-  `AttributeError: 'NoneType' object has no attribute 'shape'`. The Cython path handles the
-  same file, but returns 0 rather than the dummy for masked pixels; this reader applies the
-  dummy consistently, which is what `dummy` is for.
+| [docs/validation.md](docs/validation.md) | what each reader has been checked against, and how |
+| [docs/performance.md](docs/performance.md) | measured against FabIO on the same files |
+| [docs/fabio-py-defects.md](docs/fabio-py-defects.md) | defects found in FabIO along the way |
+| [DESIGN.md](DESIGN.md) | architecture, and the reasoning behind it |
+| [STATUS.md](STATUS.md) | where the work stands, and what is next |
 
 ## Licence
 
