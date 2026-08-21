@@ -135,7 +135,7 @@ function writedtrek(
     print(io, "Data_type=", DTREK_TYPE_NAMES[T], ";\n")
     print(io, "SIZE1=", size(A, 1), ";\n")
     print(io, "SIZE2=", size(A, 2), ";\n")
-    for (k, v) in header
+    for (k, v) in striplayoutkeys(Dtrek(), header)
         print(io, k, "=", v, ";\n")
     end
     print(io, "}\n")
@@ -156,3 +156,6 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::Dtrek, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone(writedtrek, fmt, path, arrays, headers; kwargs...)
+
+"""The keys `writedtrek` generates from the array itself. See [`layoutkeys`](@ref)."""
+layoutkeys(::Dtrek) = ("HEADER_BYTES", "DIM", "BYTE_ORDER", "Data_type", "SIZE1", "SIZE2")

@@ -60,6 +60,7 @@ export ImageFrame,
     openimage,
     readimage,
     writeimage,
+    convertimage,
     readheader,
     readheaders
 

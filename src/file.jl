@@ -165,6 +165,7 @@ function readframe_layout(f::ImageFile, i::Int)
         fileindex = i,
         seriesindex = i,
         source = f.path,
+        format = f.format,
     )
 end
 

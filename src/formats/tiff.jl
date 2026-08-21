@@ -259,6 +259,7 @@ function readframe(f::ImageFile{<:TIFFLike}, i::Int)
         fileindex = i,
         seriesindex = i,
         source = f.path,
+        format = f.format,
     )
 end
 
@@ -639,3 +640,17 @@ writeformat(::TIFFLike{:plain}, path::AbstractString, arrays::AbstractVector, ::
 """Generic write entry point. A MarCCD file holds a single image. See [`writeformat`](@ref)."""
 writeformat(fmt::TIFFLike{:marccd}, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone(writemarccd, fmt, path, arrays, headers; kwargs...)
+
+"""The TIFF tags this reader interprets rather than reports. See [`layoutkeys`](@ref)."""
+layoutkeys(::TIFFLike) = (
+    "ImageWidth", "ImageLength", "BitsPerSample", "SampleFormat", "Compression",
+    "ByteOrder", "NumberOfStrips",
+)
+
+"""MarCCD adds its own binary-header description on top of the TIFF tags."""
+layoutkeys(::TIFFLike{:marccd}) = (
+    "ImageWidth", "ImageLength", "BitsPerSample", "SampleFormat", "Compression",
+    "ByteOrder", "NumberOfStrips",
+    "nfast", "nslow", "depth", "data_type", "origin", "orientation",
+    "over_8_bits", "over_16_bits",
+)

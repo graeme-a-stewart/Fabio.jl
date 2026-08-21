@@ -197,3 +197,14 @@ end
 """Generic write entry point. MRC is natively multi-frame. See [`writeformat`](@ref)."""
 writeformat(::MRC, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
     writemrc(path, arrays; kwargs...)
+
+"""
+The MRC words describing the map's shape and storage.
+
+The cell dimensions, the density statistics and the labels are left alone: they are properties
+of the data, not of how it was written. See [`layoutkeys`](@ref).
+"""
+layoutkeys(::MRC) = (
+    "NX", "NY", "NZ", "MODE", "MAPC", "MAPR", "MAPS", "MACHST", "MAP", "ByteOrder",
+    "NSYMBT", "NLABL", "FrameIndex",
+)

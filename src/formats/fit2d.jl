@@ -301,3 +301,6 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::Fit2D, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone((p, a, _h; kw...) -> writefit2d(p, a; kw...), fmt, path, arrays, headers; kwargs...)
+
+"""Fit2D's record bookkeeping. See [`layoutkeys`](@ref)."""
+layoutkeys(::Fit2D) = ("BlockSize", "ByteOrder", "\$FFF_START", "data_array_dims", "ImageRecord")

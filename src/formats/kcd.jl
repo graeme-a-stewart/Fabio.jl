@@ -150,3 +150,6 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::KCD, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone((p, a, _h; kw...) -> writekcd(p, a; kw...), fmt, path, arrays, headers; kwargs...)
+
+"""KCD's shape and readout count. See [`layoutkeys`](@ref)."""
+layoutkeys(::KCD) = ("X dimension", "Y dimension", "Data type", "Number of readouts")

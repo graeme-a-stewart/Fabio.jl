@@ -232,3 +232,6 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::PNM, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone((p, a, _h; kw...) -> writepnm(p, a; kw...), fmt, path, arrays, headers; kwargs...)
+
+"""Netpbm's header is nothing but layout. See [`layoutkeys`](@ref)."""
+layoutkeys(::PNM) = ("SUBFORMAT", "WIDTH", "HEIGHT", "MAXVAL")

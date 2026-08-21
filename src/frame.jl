@@ -29,6 +29,7 @@ struct ImageFrame{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
     fileindex::Int
     seriesindex::Int
     source::Union{Nothing,String}
+    format::Union{Nothing,ImageFormat}
 end
 
 function ImageFrame(
@@ -37,6 +38,7 @@ function ImageFrame(
     fileindex::Int = 1,
     seriesindex::Int = fileindex,
     source::Union{Nothing,AbstractString} = nothing,
+    format::Union{Nothing,ImageFormat} = nothing,
 ) where {T,N}
     ImageFrame{T,N,typeof(data)}(
         data,
@@ -44,6 +46,7 @@ function ImageFrame(
         fileindex,
         seriesindex,
         source === nothing ? nothing : String(source),
+        format,
     )
 end
 
@@ -74,6 +77,18 @@ data(f::ImageFrame) = f.data
 Metadata recorded with this frame.
 """
 header(f::ImageFrame) = f.header
+
+"""
+    imageformat(frame) -> Union{Nothing,ImageFormat}
+
+The format this frame was read from, or `nothing` for one built by hand.
+
+Knowing where a frame came from is what lets [`convertimage`]() tell the metadata of the
+experiment from the keys that merely describe how *this* file stored its pixels, and drop the
+second kind on the way out. FabIO gets the same information from the frame's class, its images
+being format objects; here the frame is a plain array, so it carries the format instead.
+"""
+imageformat(f::ImageFrame) = f.format
 
 """
     rowmajor(frame)

@@ -171,3 +171,80 @@ _wpattern(::Type{T}, nx, ny, k = 0) where {T} =
         @test writeformatforpath("X.EDF") === Fabio.EDF()
     end
 end
+
+@testset "convertimage" begin
+    CDIR = mktempdir()
+    A = _wpattern(UInt16, 12, 8)
+    h = Fabio.Header()
+    h["Title"] = "enstatite scan"
+    h["ExposureTime"] = "1.5"
+
+    src = joinpath(CDIR, "src.edf")
+    writeimage(src, A; header = h)
+    frame = Fabio.readimage(src)
+
+    @testset "a frame knows the format it was read from" begin
+        @test Fabio.imageformat(frame) === Fabio.EDF()
+        # A frame built by hand has no format, and converting one is still fine.
+        @test Fabio.imageformat(ImageFrame(A)) === nothing
+        @test collect(Fabio.convertimage(ImageFrame(A), Fabio.EDF())) == A
+    end
+
+    @testset "layout keys are dropped, metadata is carried" begin
+        @test haskey(header(frame), "Dim_1")          # the source describes its own layout
+        conv = Fabio.convertimage(frame, Fabio.CBF())
+        @test Fabio.imageformat(conv) === Fabio.CBF()
+        # The EDF layout keys describe a file the CBF is not.
+        for k in ("HeaderID", "ByteOrder", "DataType", "Dim_1", "Dim_2", "Size")
+            @test !haskey(header(conv), k)
+        end
+        # The experiment metadata is what conversion exists to preserve.
+        @test header(conv)["Title"] == "enstatite scan"
+        @test header(conv)["ExposureTime"] == "1.5"
+        @test collect(conv) == A
+    end
+
+    @testset "the documented TIFF to EDF conversion (DESIGN 16.3)" begin
+        tif = joinpath(CDIR, "my.tiff")
+        writeimage(tif, A)
+        out = joinpath(CDIR, "my.edf")
+        writeimage(out, Fabio.convertimage(Fabio.readimage(tif), Fabio.EDF()))
+        @test collect(Fabio.readimage(out)) == A
+    end
+
+    @testset "metadata survives a CBF round trip" begin
+        # writecbf used to emit `key value`, which is neither a CIF data name nor a comment,
+        # so its own reader skipped it and the metadata was written but unreadable.
+        p = joinpath(CDIR, "meta.cbf")
+        writeimage(p, Fabio.convertimage(frame, Fabio.CBF()))
+        back = Fabio.readimage(p)
+        @test collect(back) == A
+        @test Fabio.getci(header(back), "Title") == "enstatite scan"
+        @test Fabio.getci(header(back), "ExposureTime") == "1.5"
+    end
+
+    @testset "coerce runs on the way through" begin
+        conv = Fabio.convertimage(frame, Fabio.Fit2D())
+        @test eltype(conv) === Int32
+        @test collect(conv) == Int32.(A)
+    end
+
+    @testset "a stale layout key cannot override the real one" begin
+        # The regression that motivated `layoutkeys`: writing a differently shaped array while
+        # carrying a header from the source wrote Dim_1 twice, the reader took the last, and
+        # the file was unreadable — a TruncatedFileError claiming 400 bytes for an 80-byte blob.
+        small = A[1:8, 1:5]
+        for (ext, fmt) in (("edf", Fabio.EDF()), ("img", Fabio.Dtrek()), ("sfrm", Fabio.Bruker{86}()))
+            p = joinpath(CDIR, "stale.$ext")
+            writeimage(p, small; header = header(frame), format = fmt)
+            back = Fabio.readimage(p)
+            @test size(back) == size(small)
+            @test collect(back) == small
+        end
+        # And the keys appear once each, not twice.
+        p = joinpath(CDIR, "once.edf")
+        writeimage(p, small; header = header(frame))
+        text = String(read(p))
+        @test count(==("Dim_1"), [strip(first(split(l, '='))) for l in split(text, ';') if occursin('=', l)]) == 1
+    end
+end

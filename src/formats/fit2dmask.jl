@@ -114,3 +114,6 @@ end
 """Generic write entry point. A mask carries no header. See [`writeformat`](@ref)."""
 writeformat(fmt::Fit2DMask, path::AbstractString, arrays::AbstractVector, headers::AbstractVector) =
     writeone((p, a, _h) -> writefit2dmask(p, a), fmt, path, arrays, headers)
+
+"""A mask header is only its shape. See [`layoutkeys`](@ref)."""
+layoutkeys(::Fit2DMask) = ("SUBFORMAT", "Dim_1", "Dim_2")

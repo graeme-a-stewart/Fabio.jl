@@ -179,8 +179,16 @@ function writecbf(path::AbstractString, A::AbstractArray{T,2}, header::Header = 
     io = IOBuffer()
     print(io, "###CBF: VERSION 1.5\n\n")
     print(io, "data_fabio_jl\n\n")
-    for (k, v) in header
-        print(io, k, " ", v, "\n")
+    for (k, v) in striplayoutkeys(CBF(), header)
+        # A bare `key value` line is neither a CIF data name nor a comment, so the reader —
+        # ours and any other — skips it, and the metadata is written but unreadable. A name
+        # that is already a CIF one is written as it stands; anything else goes in the comment
+        # block, which is where Pilatus puts its header and where the reader looks for it.
+        if startswith(String(k), "_")
+            print(io, k, " ", v, "\n")
+        else
+            print(io, "# ", k, " ", v, "\n")
+        end
     end
     print(io, "\n_array_data.data\n;\n")
     print(io, CBF_SECTION, "\n")
@@ -207,3 +215,11 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::CBF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone(writecbf, fmt, path, arrays, headers; kwargs...)
+
+"""The CBF binary-section keys, which describe this file only. See [`layoutkeys`](@ref)."""
+layoutkeys(::CBF) = (
+    "CBF", "_array_data.data", "Content-Type", "conversions", "Content-Transfer-Encoding",
+    "X-Binary-Size", "X-Binary-ID", "X-Binary-Element-Type", "X-Binary-Element-Byte-Order",
+    "X-Binary-Number-of-Elements", "X-Binary-Size-Fastest-Dimension",
+    "X-Binary-Size-Second-Dimension", "X-Binary-Size-Padding",
+)

@@ -163,3 +163,11 @@ end
 """Generic write entry point. SPE is natively multi-frame. See [`writeformat`](@ref)."""
 writeformat(::SPE, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
     writespe(path, arrays; kwargs...)
+
+"""
+SPE's shape and storage fields.
+
+`exposure_time`, `center_wavelength`, `grating`, `date` and `time` are deliberately absent:
+they describe the measurement and should survive a conversion. See [`layoutkeys`](@ref).
+"""
+layoutkeys(::SPE) = ("version", "x_dim", "y_dim", "data_type", "xml_offset", "num_frames", "FrameIndex")

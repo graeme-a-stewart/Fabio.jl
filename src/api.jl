@@ -26,6 +26,7 @@ function readimage(path::AbstractString; frame::Integer = 1, kwargs...)
             fileindex = f.fileindex,
             seriesindex = f.seriesindex,
             source = f.source,
+            format = f.format,
         )
     end
 end
@@ -39,6 +40,7 @@ function readimage(path::AbstractString, ::Type{T}; frame::Integer = 1, kwargs..
             fileindex = f.fileindex,
             seriesindex = f.seriesindex,
             source = f.source,
+            format = f.format,
         )
     end
 end

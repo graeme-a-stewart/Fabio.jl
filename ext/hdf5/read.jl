@@ -175,6 +175,7 @@ function Fabio.readframe(f::ImageFile{<:NexusLike}, i::Int)
         fileindex = i,
         seriesindex = i,
         source = f.path,
+        format = f.format,
     )
 end
 
@@ -218,3 +219,6 @@ function _readerror(err, ds, sl::HDF5Slice)
     end
     return err
 end
+
+"""Bookkeeping this reader adds, true of one container only. See [`Fabio.layoutkeys`](@ref)."""
+Fabio.layoutkeys(::NexusLike) = ("HDF5File", "HDF5Path")

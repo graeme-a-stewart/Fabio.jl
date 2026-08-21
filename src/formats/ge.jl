@@ -186,3 +186,11 @@ end
 """Generic write entry point. GE is natively multi-frame. See [`writeformat`](@ref)."""
 writeformat(::GE, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
     writege(path, arrays; kwargs...)
+
+"""The GE standard header is entirely a description of the file. See [`layoutkeys`](@ref)."""
+layoutkeys(::GE) = (
+    "ImageFormat", "VersionOfStandardHeader", "StandardHeaderSizeInBytes",
+    "VersionOfUserHeader", "UserHeaderSizeInBytes", "NumberOfFrames",
+    "NumberOfRowsInFrame", "NumberOfColsInFrame", "ImageDepthInBits", "HeaderBlanked",
+    "FrameIndex",
+)

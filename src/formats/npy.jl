@@ -130,3 +130,6 @@ end
 """Generic write entry point. NumPy carries no header of its own. See [`writeformat`](@ref)."""
 writeformat(fmt::NPY, path::AbstractString, arrays::AbstractVector, headers::AbstractVector) =
     writeone((p, a, _h) -> writenpy(p, a), fmt, path, arrays, headers)
+
+"""The three fields of a `.npy` header, all describing the buffer. See [`layoutkeys`](@ref)."""
+layoutkeys(::NPY) = ("descr", "fortran_order", "shape")

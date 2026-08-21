@@ -266,7 +266,7 @@ function writebruker(
     push!(lines, _bruker_line("NCOLS", string(cols)))
     push!(lines, _bruker_line("NPIXELB", string(npixelb)))
     push!(lines, _bruker_line("NOVERFL", string(length(overflow))))
-    for (k, v) in header
+    for (k, v) in striplayoutkeys(Bruker{86}(), header)
         push!(lines, _bruker_line(k, string(v)))
     end
     body = join(lines)
@@ -477,3 +477,8 @@ end
 """Generic write entry point. Only `FORMAT:86` can be written. See [`writeformat`](@ref)."""
 writeformat(fmt::Bruker{86}, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone(writebruker, fmt, path, arrays, headers; kwargs...)
+
+"""The keys `writebruker` generates from the array itself. See [`layoutkeys`](@ref)."""
+layoutkeys(::Bruker) = (
+    "FORMAT", "VERSION", "HDRBLKS", "NROWS", "NCOLS", "NPIXELB", "NOVERFL", "datastart",
+)

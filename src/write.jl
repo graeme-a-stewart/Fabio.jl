@@ -196,3 +196,78 @@ _writedata(f::ImageFrame) = data(f)
 _writedata(A::AbstractArray) = A
 _writeheader(f::ImageFrame) = header(f)
 _writeheader(::AbstractArray) = Header()
+
+# ------------------------------------------------------------------ header translation
+
+"""
+    layoutkeys(fmt) -> NTuple{N,String}
+
+The header keys that describe how *this* format stores its pixels, rather than anything about
+the experiment: shape, element type, byte order, offsets, and the format's own stamps.
+
+They serve two purposes, and both are about keys that are true of one file and false of the
+next. A writer must not let a caller's stale copy of them through, or the file ends up saying
+its dimensions twice and disagreeing; and [`convertimage`](@ref) drops the *source* format's
+set, because carrying `Dim_1` into a CBF describes nothing there.
+
+The distinction is the one the FabIO documentation itself draws — "information in the header
+about the binary part of the image (compression, endianness, shape) are interpreted however,
+other metadata are exposed as they are recorded in the file". This names the first kind.
+
+Default: none, which carries every key exactly as FabIO does.
+"""
+layoutkeys(::ImageFormat) = ()
+
+"""
+    striplayoutkeys(fmt, header) -> Header
+
+`header` without the keys `fmt` generates for itself. Case-insensitive, since writers within a
+single format disagree about capitalisation.
+"""
+function striplayoutkeys(fmt::ImageFormat, h::Header)
+    keep = layoutkeys(fmt)
+    isempty(keep) && return h
+    drop = Set(uppercase(k) for k in keep)
+    out = Header()
+    for (k, v) in h
+        uppercase(k) in drop || (out[k] = v)
+    end
+    return out
+end
+
+"""
+    convertimage(frame, fmt) -> ImageFrame
+
+Adapt `frame` to what `fmt` can store, in both its pixels and its metadata.
+
+This is [`coerce`](@ref) — element type, and shape where the format insists — together with
+the header translation `coerce` cannot do, since only the frame knows where it came from. The
+result is an ordinary [`ImageFrame`](@ref) tagged with the destination format, ready for
+[`writeimage`](@ref):
+
+```julia
+Fabio.writeimage("my.edf", Fabio.convertimage(Fabio.readimage("my.tiff"), Fabio.EDF()))
+```
+
+Going through `convertimage` is not required — `writeimage` coerces anyway — but it is what
+removes the source format's [`layoutkeys`](@ref), so a converted file does not carry a
+description of the file it came from.
+
+FabIO's equivalent, `image.convert("edf")`, passes the header through untouched: its
+`converters.CONVERSION_HEADER` holds exactly one entry, EDF to EDF, and that one is the
+identity. Its data table is seven `astype(int)` casts, which `coerce` subsumes and improves on
+by being per-format and saying when it loses something.
+"""
+function convertimage(frame::ImageFrame, fmt::ImageFormat)
+    h = header(frame)
+    from = imageformat(frame)
+    from === nothing || (h = striplayoutkeys(from, h))
+    return ImageFrame(
+        coerce(fmt, data(frame)),
+        h;
+        fileindex = frame.fileindex,
+        seriesindex = frame.seriesindex,
+        source = frame.source,
+        format = fmt,
+    )
+end

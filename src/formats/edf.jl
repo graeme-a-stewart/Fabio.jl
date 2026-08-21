@@ -242,7 +242,10 @@ function edfheadertext(
     print(io, "Dim_1 = ", size(A, 1), " ;\n")
     print(io, "Dim_2 = ", size(A, 2), " ;\n")
     print(io, "Size = ", length(A) * sizeof(T), " ;\n")
-    for (k, v) in header
+    # The keys above are generated from the array, so a caller's stale copy of them must not
+    # follow: EDF has no notion of a duplicate key, the reader keeps the last one seen, and a
+    # header carried over from a differently shaped file would otherwise describe this one.
+    for (k, v) in striplayoutkeys(EDF(), header)
         print(io, k, " = ", v, " ;\n")
     end
     body = String(take!(io))
@@ -269,3 +272,9 @@ end
 """Generic write entry point. See [`writeformat`](@ref)."""
 writeformat(fmt::EDF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
     writeone(writeedf, fmt, path, arrays, headers; kwargs...)
+
+"""The keys `writeedf` generates from the array itself. See [`layoutkeys`](@ref)."""
+layoutkeys(::EDF) = (
+    "HeaderID", "ByteOrder", "DataType", "Dim_1", "Dim_2", "Size", "Compression",
+    "EDF_BinarySize", "EDF_HeaderSize",
+)
