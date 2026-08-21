@@ -279,3 +279,25 @@ function writefit2d(
     end
     return path
 end
+
+"""
+Fit2D stores its `data_array` record as `Int32` or `Float32`, and nothing else.
+
+A float input keeps its fractional part by narrowing to `Float32`; an integer input becomes
+`Int32`. This is the gap the generic write path exposed: `writefit2d` rightly refuses anything
+else, so without a `coerce` method `writeimage("x.f2d", ::Matrix{UInt16})` was a `MethodError`
+from two calls down rather than a conversion the format asks for.
+"""
+function coerce(::Fit2D, A::AbstractArray{T,2}) where {T}
+    (T === Int32 || T === Float32) && return A
+    if T <: AbstractFloat
+        return convert(Array{Float32}, A)
+    end
+    any(x -> x < typemin(Int32) || x > typemax(Int32), A) &&
+        @warn "Fit2D stores 32-bit signed integers; values outside that range will wrap"
+    return convert(Array{Int32}, A .% Int32)
+end
+
+"""Generic write entry point. See [`writeformat`](@ref)."""
+writeformat(fmt::Fit2D, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone((p, a, _h; kw...) -> writefit2d(p, a; kw...), fmt, path, arrays, headers; kwargs...)

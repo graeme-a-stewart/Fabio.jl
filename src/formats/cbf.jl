@@ -203,3 +203,7 @@ function writecbf(path::AbstractString, A::AbstractArray{T,2}, header::Header = 
     end
     return path
 end
+
+"""Generic write entry point. See [`writeformat`](@ref)."""
+writeformat(fmt::CBF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone(writecbf, fmt, path, arrays, headers; kwargs...)

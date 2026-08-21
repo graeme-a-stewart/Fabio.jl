@@ -158,3 +158,7 @@ function writempa(
     end
     return path
 end
+
+"""Generic write entry point. See [`writeformat`](@ref)."""
+writeformat(fmt::MPA, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone((p, a, _h; kw...) -> writempa(p, a; kw...), fmt, path, arrays, headers; kwargs...)

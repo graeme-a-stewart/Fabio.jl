@@ -110,3 +110,7 @@ function writefit2dmask(path::AbstractString, A::AbstractArray{<:Any,2})
     end
     return path
 end
+
+"""Generic write entry point. A mask carries no header. See [`writeformat`](@ref)."""
+writeformat(fmt::Fit2DMask, path::AbstractString, arrays::AbstractVector, headers::AbstractVector) =
+    writeone((p, a, _h) -> writefit2dmask(p, a), fmt, path, arrays, headers)

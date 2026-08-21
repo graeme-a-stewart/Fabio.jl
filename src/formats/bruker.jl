@@ -473,3 +473,7 @@ function _bruker_int_at(h::Header, key::AbstractString, i::Int, default::Int)
     p = tryparse(Int, toks[i])
     return p === nothing ? default : p
 end
+
+"""Generic write entry point. Only `FORMAT:86` can be written. See [`writeformat`](@ref)."""
+writeformat(fmt::Bruker{86}, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone(writebruker, fmt, path, arrays, headers; kwargs...)

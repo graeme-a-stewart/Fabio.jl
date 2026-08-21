@@ -43,7 +43,7 @@ See [`scan`](@ref) for the tier-1 extension point (parse a header, return a
 module Fabio
 
 using OrderedCollections: OrderedDict
-using CodecZlib: GzipDecompressor, ZlibDecompressor, ZlibCompressor
+using CodecZlib: GzipDecompressor, GzipCompressor, ZlibDecompressor, ZlibCompressor
 using TranscodingStreams: transcode
 import Mmap
 
@@ -59,6 +59,7 @@ export ImageFrame,
     pixeltype,
     openimage,
     readimage,
+    writeimage,
     readheader,
     readheaders
 
@@ -75,6 +76,7 @@ include("registry.jl")
 include("detect.jl")
 include("file.jl")
 include("api.jl")
+include("write.jl")
 
 include("formats/bruker.jl")
 include("formats/cbf.jl")
@@ -116,7 +118,6 @@ function registerdefaults!()
         description = "CrysAlis Pro Esperanto",
         extensions = ["esperanto", "esper"],
         magic = [Magic("ESPERANTO FORMAT")],
-        writer = false,
     )
     register!(
         CBF();
@@ -124,7 +125,6 @@ function registerdefaults!()
         description = "CIF Binary Format (Pilatus and others)",
         extensions = ["cbf"],
         magic = [Magic("###CBF: VERSION"), Magic("###CBF:")],
-        writer = false,
     )
     register!(
         Dtrek();
@@ -133,7 +133,6 @@ function registerdefaults!()
         extensions = ["img"],
         # Longer than EDF's bare "{", so the registry orders it first without special cases.
         magic = [Magic("{\nHEA"), Magic("{\r\nHEA")],
-        writer = false,
     )
     register!(
         Bruker{86}();
@@ -141,14 +140,12 @@ function registerdefaults!()
         description = "Bruker area detector (FORMAT:86)",
         extensions = ["sfrm"],
         magic = [Magic("FORMAT :")],
-        writer = false,
     )
     register!(
         Bruker{100}();
         name = :bruker100,
         description = "Bruker area detector (FORMAT:100)",
         extensions = ["sfrm"],
-        writer = false,
     )
     register!(
         Mar345();
@@ -159,7 +156,6 @@ function registerdefaults!()
         magic = [Magic(UInt8[0xD2, 0x04, 0x00, 0x00]), Magic(UInt8[0x00, 0x00, 0x04, 0xD2])],
         extensions = ["mar345", "mar3450", "mar3000", "mar2400", "mar2300",
                       "mar2000", "mar1800", "mar1600", "mar1200"],
-        writer = false,
     )
     # The TIFF family. Pilatus is caught by its own longer signature — its first IFD sits at
     # byte 0x82 — while MarCCD has no distinct magic and is resolved by `refine`.
@@ -169,14 +165,12 @@ function registerdefaults!()
         description = "Dectris Pilatus (TIFF with a text header)",
         extensions = ["tif", "tiff"],
         magic = [Magic(UInt8[0x49, 0x49, 0x2A, 0x00, 0x82, 0x00])],
-        writer = false,
     )
     register!(
         TIFFLike{:marccd}();
         name = :marccd,
         description = "MarCCD / Mar165 (TIFF with a binary header)",
         extensions = ["mccd"],
-        writer = true,
     )
     register!(
         TIFFLike{:plain}();
@@ -184,7 +178,6 @@ function registerdefaults!()
         description = "Tagged Image File Format (baseline, uncompressed)",
         extensions = ["tif", "tiff"],
         magic = [Magic(TIFF_LE), Magic(TIFF_BE)],
-        writer = false,
     )
     register!(
         Fit2D{:little}();
@@ -192,7 +185,6 @@ function registerdefaults!()
         description = "Fit2D binary (record-structured)",
         extensions = ["f2d"],
         magic = [Magic("\\\$FFF_START")],
-        writer = false,
     )
     register!(
         Fit2DMask();
@@ -200,7 +192,6 @@ function registerdefaults!()
         description = "Fit2D mask (one bit per pixel)",
         extensions = ["msk"],
         magic = [Magic(UInt8['M', 0, 0, 0, 'A', 0, 0, 0, 'S', 0, 0, 0, 'K', 0, 0, 0])],
-        writer = true,
     )
     register!(
         Raxis();
@@ -208,14 +199,12 @@ function registerdefaults!()
         description = "Rigaku R-AXIS imaging plate",
         extensions = ["img", "osc"],
         magic = [Magic("R-AXIS"), Magic("RAXIS")],
-        writer = false,
     )
     register!(
         SPE();
         name = :spe,
         description = "Princeton Instruments WinSpec (multi-frame)",
         extensions = ["spe"],
-        writer = false,
     )
     register!(
         DM3();
@@ -223,7 +212,6 @@ function registerdefaults!()
         description = "Gatan Digital Micrograph",
         extensions = ["dm3"],
         magic = [Magic(UInt8[0x00, 0x00, 0x00, 0x03])],
-        writer = false,
     )
     register!(
         KCD();
@@ -232,7 +220,6 @@ function registerdefaults!()
         extensions = ["kcd"],
         magic = [Magic("No")],
         priority = -1,          # a two-byte signature, so let longer ones win
-        writer = false,
     )
     register!(
         MPA();
@@ -240,7 +227,6 @@ function registerdefaults!()
         description = "Multi-wire detector (FastComTec)",
         extensions = ["mpa"],
         magic = [Magic("[ADC1]")],
-        writer = false,
     )
     register!(
         MRC();
@@ -248,7 +234,6 @@ function registerdefaults!()
         description = "MRC / CCP4 map (multi-frame)",
         extensions = ["mrc", "map", "fei"],
         magic = [Magic("MAP ", 208), Magic("MAP\0", 208)],
-        writer = false,
     )
     register!(
         OXD();
@@ -257,7 +242,6 @@ function registerdefaults!()
         extensions = ["img"],
         magic = [Magic("OD")],
         priority = -1,           # a two-byte signature, so let longer ones win
-        writer = false,
     )
     # No magic number and no extension FabIO recognises, so it is reached by an explicit
     # `format = Xcalibur(...)` rather than by detection.
@@ -266,7 +250,6 @@ function registerdefaults!()
         name = :xcalibur,
         description = "CrysalisPro chip characteristics (bad-pixel mask)",
         extensions = ["ccd"],
-        writer = false,
     )
     register!(
         PNM();
@@ -274,7 +257,6 @@ function registerdefaults!()
         description = "Netpbm greyscale and bitmap (P1, P2, P4, P5)",
         extensions = ["pnm", "pgm", "pbm"],
         magic = [Magic("P1"), Magic("P2"), Magic("P4"), Magic("P5")],
-        writer = false,
     )
     register!(
         GE();
@@ -288,7 +270,6 @@ function registerdefaults!()
         # table, below even EDF's bare brace, since it is the least selective signature here.
         magic = [Magic("ADEPT"), Magic(zeros(UInt8, 10))],
         priority = -2,
-        writer = false,
     )
     # One entry for the whole HDF5 family. Which member a file actually is cannot be told
     # from its first bytes — every one of them starts with the same eight — so `refine` opens
@@ -302,7 +283,6 @@ function registerdefaults!()
         description = "HDF5 / NeXus (Eiger, LImA, Lambda, sparsify-Bragg)",
         extensions = ["h5", "hdf5", "nxs"],
         magic = [Magic(HDF5_MAGIC)],
-        writer = false,
     )
     register!(
         NPY();
@@ -310,7 +290,6 @@ function registerdefaults!()
         description = "NumPy array container",
         extensions = ["npy"],
         magic = [Magic(NPY_MAGIC)],
-        writer = false,
     )
     register!(
         EDF();
@@ -326,7 +305,6 @@ function registerdefaults!()
             Magic("{"),
         ],
         priority = -1,   # EDF's bare "{" is the least specific signature in the table
-        writer = false,
     )
     return REGISTRY
 end

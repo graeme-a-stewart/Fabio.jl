@@ -66,7 +66,7 @@ function register!(
     magic::AbstractVector{Magic} = Magic[],
     priority::Integer = 0,
     reader::Bool = true,
-    writer::Bool = false,
+    writer::Bool = canwrite(fmt),
 )
     entry = FormatEntry(
         fmt,

@@ -193,3 +193,7 @@ function writemrc(
     end
     return path
 end
+
+"""Generic write entry point. MRC is natively multi-frame. See [`writeformat`](@ref)."""
+writeformat(::MRC, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
+    writemrc(path, arrays; kwargs...)

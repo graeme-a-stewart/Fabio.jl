@@ -152,3 +152,7 @@ function writedtrek(
     end
     return path
 end
+
+"""Generic write entry point. See [`writeformat`](@ref)."""
+writeformat(fmt::Dtrek, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone(writedtrek, fmt, path, arrays, headers; kwargs...)

@@ -182,3 +182,7 @@ function writege(
     end
     return path
 end
+
+"""Generic write entry point. GE is natively multi-frame. See [`writeformat`](@ref)."""
+writeformat(::GE, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
+    writege(path, arrays; kwargs...)

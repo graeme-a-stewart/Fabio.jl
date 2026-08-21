@@ -126,3 +126,7 @@ function writenpy(path::AbstractString, A::AbstractArray{T,2}) where {T}
     end
     return path
 end
+
+"""Generic write entry point. NumPy carries no header of its own. See [`writeformat`](@ref)."""
+writeformat(fmt::NPY, path::AbstractString, arrays::AbstractVector, headers::AbstractVector) =
+    writeone((p, a, _h) -> writenpy(p, a), fmt, path, arrays, headers)

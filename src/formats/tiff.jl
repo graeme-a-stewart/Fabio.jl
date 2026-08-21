@@ -625,5 +625,17 @@ function coerce(::TIFFLike{:marccd}, A::AbstractArray{T,2}) where {T}
     B = T <: Integer ? A : (@info "MarCCD stores integers; rounding"; round.(A))
     any(x -> x < 0 || x > 65535, B) &&
         @warn "MarCCD is 16-bit unsigned; values outside 0:65535 will wrap"
-    return convert(Array{UInt16}, B .% UInt16)
+    # `%` is the modular conversion that implements the wrap the warning describes, but it is
+    # defined between integers: rounding a float array leaves it a float array, so it has to
+    # become an integer one first.
+    C = B isa AbstractArray{<:Integer} ? B : convert(Array{Int64}, B)
+    return convert(Array{UInt16}, C .% UInt16)
 end
+
+"""Generic write entry point. A TIFF holds one IFD per frame. See [`writeformat`](@ref)."""
+writeformat(::TIFFLike{:plain}, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
+    writetiff(path, arrays; kwargs...)
+
+"""Generic write entry point. A MarCCD file holds a single image. See [`writeformat`](@ref)."""
+writeformat(fmt::TIFFLike{:marccd}, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone(writemarccd, fmt, path, arrays, headers; kwargs...)

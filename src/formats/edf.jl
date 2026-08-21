@@ -265,3 +265,7 @@ function writeedf(path::AbstractString, A::AbstractArray{T,2}, header::Header = 
     end
     return path
 end
+
+"""Generic write entry point. See [`writeformat`](@ref)."""
+writeformat(fmt::EDF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeone(writeedf, fmt, path, arrays, headers; kwargs...)

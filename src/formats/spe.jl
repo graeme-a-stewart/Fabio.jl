@@ -159,3 +159,7 @@ function writespe(
     end
     return path
 end
+
+"""Generic write entry point. SPE is natively multi-frame. See [`writeformat`](@ref)."""
+writeformat(::SPE, path::AbstractString, arrays::AbstractVector, ::AbstractVector; kwargs...) =
+    writespe(path, arrays; kwargs...)
