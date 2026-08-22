@@ -116,6 +116,39 @@ key in one known format:
 Neither is preferred. Use `hdr[key]` to see what the file says, and `getheader` when you want a
 number out of it.
 
+## Normalised metadata
+
+Six quantities recur across almost every detector format, under a different name and in a
+different unit each time. `Fabio.normalise` is a thin, optional layer over the raw header for
+exactly those:
+
+```julia
+m = Fabio.normalise(Fabio.readimage("scan.esperanto"))
+
+m.exposure_time        # 1.0        seconds
+m.wavelength           # 2.9e-11    metres — 1e10 * this is Ångström
+m.detector_distance    # 0.4        metres
+m.beam_center          # (1024.0, 0.0)      pixels, (fast, slow)
+m.pixel_size           # (0.0002, 0.0002)   metres
+m.timestamp            # a DateTime, or nothing
+```
+
+**Lengths are metres**, so these numbers deliberately do not match the raw header — Esperanto
+records millimetres, Bruker centimetres, KCD micrometres, and wavelengths are almost always in
+Ångström. Metres throughout is pyFAI's convention, and pyFAI is what most often consumes this
+data. The raw `Header` is untouched and remains the source of truth.
+
+Implemented for Esperanto, MarCCD, Pilatus, CBF, d\*TREK/ADSC, Bruker and KCD. Any other
+format returns an all-`nothing` result rather than an error, and adding one is a single method:
+
+```julia
+Fabio.normalise(::MyDetector, h::Fabio.Header) =
+    Fabio.ImageMetadata(exposure_time = getheader(h, "EXPOSURE", Float64, 0.0))
+```
+
+FabIO has no equivalent — it deliberately leaves header semantics alone, and so does this
+package by default; nothing above is consulted unless you ask for it.
+
 ## HDF5
 
 The HDF5 readers arrive with the library:

@@ -7,6 +7,7 @@ using Fabio:
 using Fabio: opensource, bytes, filesize, framestack, readframe!, framesize
 using Fabio: writeedf, writenpy, writecbf, edfheadertext, coerce, scan, detectformat
 using Statistics
+using Dates: DateTime
 using CodecZlib: GzipCompressor
 using TranscodingStreams: transcode
 
@@ -46,4 +47,5 @@ include("test_write.jl")
 include("test_hdf5.jl")
 include("test_hdf5_real.jl")
 include("test_series.jl")
+include("test_metadata.jl")
 include("usecases.jl")

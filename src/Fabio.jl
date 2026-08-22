@@ -46,6 +46,7 @@ using OrderedCollections: OrderedDict
 using CodecZlib: GzipDecompressor, GzipCompressor, ZlibDecompressor, ZlibCompressor
 using TranscodingStreams: transcode
 import Mmap
+using Dates: DateTime, @dateformat_str
 
 export ImageFrame,
     ImageFile,
@@ -58,6 +59,8 @@ export ImageFrame,
     imageview,
     pixeltype,
     openimage,
+    ImageMetadata,
+    normalise,
     open_series,
     readimage,
     writeimage,
@@ -102,6 +105,9 @@ include("formats/spe.jl")
 include("formats/npy.jl")
 include("formats/tiff.jl")
 include("formats/xcalibur.jl")
+
+# After the formats: every `normalise` method dispatches on one of them.
+include("metadata.jl")
 
 export Bruker, CBF, DM3, Dtrek, EDF, OXD, Xcalibur, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NexusLike, NPY, PNM, Raxis, SPE, TIFFLike
 
