@@ -97,22 +97,84 @@ _upattern(::Type{T}, nx, ny, k = 0) where {T} =
         @test parent(Fabio.rowmajor(frame)) === parent(frame)
     end
 
-    # -- 16.5–16.7 File series -----------------------------------------------------------
-    @testset "16.5–16.7 file series" begin
-        # `open_series`, `nextfile`/`prevfile`/`jumpfile` and per-frame series provenance are
-        # Phase 4 item 3 and are not built yet. These are the assertions they must satisfy.
-        @test_skip Fabio.open_series(first = joinpath(UDIR, "series_0001.edf")) !== nothing
-        @test_skip Fabio.nextfile("200mMmgso4_001.mar2300") == "200mMmgso4_002.mar2300"
-        # 16.7's frame provenance already exists on a single file, so it is checked here.
+    # -- 16.5 File series, the documented mar2300 example ---------------------------------
+    @testset "16.5 file series" begin
+        # The documented example uses 200mMmgso4_001.mar2300 … from Zenodo 2546760. The
+        # capability is what is checked here, on files the suite writes itself.
+        for i = 1:8
+            Fabio.writeimage(
+                joinpath(UDIR, "200mMmgso4_" * lpad(i, 3, '0') * ".mar2300.edf"),
+                _upattern(UInt16, 24, 20, i),
+            )
+        end
+        series = Fabio.open_series(
+            first = joinpath(UDIR, "200mMmgso4_001.mar2300.edf"),
+        )
+        try
+            @test series[1][12, 10] == _upattern(UInt16, 24, 20, 1)[12, 10]
+            # `im2 = im1.next(); im2.filename` in the Python.
+            @test basename(series[2].source) == "200mMmgso4_002.mar2300.edf"
+            # Unambiguously the 5th frame of the series, whatever the format's framing (§4.2).
+            frame5 = series[5]
+            @test collect(frame5) == _upattern(UInt16, 24, 20, 5)
+            @test frame5.seriesindex == 5
+            # The filename arithmetic FabIO exposes as next_filename/previous_filename.
+            @test basename(Fabio.nextfile("200mMmgso4_001.mar2300")) == "200mMmgso4_002.mar2300"
+            @test basename(Fabio.prevfile("200mMmgso4_002.mar2300")) == "200mMmgso4_001.mar2300"
+            @test Fabio.jumpfile("200mMmgso4_001.mar2300", 5) == "200mMmgso4_005.mar2300"
+        finally
+            close(series)
+        end
+    end
+
+    # -- 16.6 Random access across a series ----------------------------------------------
+    @testset "16.6 random access across a series" begin
+        for i = 0:99
+            Fabio.writeimage(
+                joinpath(UDIR, "foobar_" * lpad(i, 4, '0') * ".edf"),
+                _upattern(UInt32, 6, 4, i),
+            )
+        end
+        Fabio.open_series(first = joinpath(UDIR, "foobar_0000.edf")) do series
+            @test length(series) == 100
+            # The documented example takes frames 1, 100 and 19, in that order.
+            frame1, frame100, frame19 = series[1], series[100], series[19]
+            @test collect(frame1) == _upattern(UInt32, 6, 4, 0)     # foobar_0000 is frame 1
+            @test collect(frame100) == _upattern(UInt32, 6, 4, 99)
+            @test collect(frame19) == _upattern(UInt32, 6, 4, 18)
+            # Frames taken before the series moved on are still valid afterwards.
+            @test collect(frame1) == _upattern(UInt32, 6, 4, 0)
+        end
+    end
+
+    # -- 16.7 Sequential access with full frame provenance --------------------------------
+    @testset "16.7 sequential access with frame provenance" begin
+        Fabio.open_series(
+            first = joinpath(UDIR, "200mMmgso4_001.mar2300.edf");
+            count = 4,
+        ) do series
+            seen = 0
+            for frame in series
+                seen += 1
+                @test frame isa AbstractArray            # the data: it *is* an array
+                @test header(frame) isa Header
+                @test frame.seriesindex == seen          # index within the series
+                @test frame.fileindex == 1               # index within its source file
+                @test frame.source !== nothing           # the file it came from
+                @test collect(frame) == _upattern(UInt16, 24, 20, seen)
+            end
+            @test seen == 4
+        end
+
+        # The same provenance holds within a single multi-frame file.
         A = _upattern(UInt16, 8, 6)
         p = joinpath(UDIR, "prov.mrc")
         Fabio.writeimage(p, [A, A .+ 0x0001, A .+ 0x0002])
         Fabio.openimage(p) do file
             for (i, frame) in enumerate(file)
-                @test frame.fileindex == i        # index within its source file
-                @test frame.seriesindex == i      # index within the enclosing series
-                @test frame.source == p           # the file it came from
-                @test header(frame) isa Header
+                @test frame.fileindex == i
+                @test frame.seriesindex == i
+                @test frame.source == p
             end
         end
     end

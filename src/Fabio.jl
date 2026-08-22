@@ -58,6 +58,7 @@ export ImageFrame,
     imageview,
     pixeltype,
     openimage,
+    open_series,
     readimage,
     writeimage,
     convertimage,
@@ -78,6 +79,7 @@ include("detect.jl")
 include("file.jl")
 include("api.jl")
 include("write.jl")
+include("series.jl")
 
 include("formats/bruker.jl")
 include("formats/cbf.jl")
