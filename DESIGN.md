@@ -931,7 +931,7 @@ padding, §4.3) that tool becomes straightforward to port later.
 | **1** ✅ | `ByteOffset` + **CBF**; `PCK` + **mar345**; the **TIFF family** (plain, Pilatus, MarCCD) in the core rather than an extension; **ADSC/d\*TREK**, **Bruker 86 and 100**. | Done. TIFF turned out to be mostly tier 1 — see the note below — and multi-strip TIFF is what exercises tier 2. |
 | **2** ✅ | **OXD** (TY1, TY5), **GE**, **Netpbm**, **MRC**, **SPE**, **Fit2D** binary and mask, **KCD**, **R-AXIS**, **MPA**, **DM3**, **Xcalibur**. | Done, all tier 1. Xcalibur had no reader in FabIO to port — its `read` is unmodified template boilerplate that raises — so this one is new work rather than a translation. |
 | **3** ✅ | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | Done. The weak-dependency design and tier 2 both worked as written; see below. |
-| **4** ⬅ in progress | `writeimage` over the per-format writers ✅, `convertimage` + the `coerce`/`layoutkeys` matrix ✅, §16 as `test/usecases.jl` ✅, `FileSeries` + filename arithmetic ✅, `ImageMetadata`/`normalise` ✅; FileIO.jl registration and a `fabio-convert` CLI still to do. | Parity polish. |
+| **4** ⬅ in progress | `writeimage` over the per-format writers ✅, `convertimage` + the `coerce`/`layoutkeys` matrix ✅, §16 as `test/usecases.jl` ✅, `FileSeries` + filename arithmetic ✅, `ImageMetadata`/`normalise` ✅, FileIO.jl registration ✅; a `fabio-convert` CLI still to do. | Parity polish. |
 
 **What phase 3 confirmed.** This was the phase the two-tier design existed for, and it needed
 no new mechanism. `refine` returning a more specific format — added in phase 2 so SPE could

@@ -1,4 +1,15 @@
 """
+    fileio_load(file)
+    fileio_save(file, data)
+
+Hooks FileIO.jl calls into. Methods arrive with `FabioFileIOExt`, which loads when the user
+runs `using FileIO`; the names are declared here because an extension may add methods to a
+function but may not create one.
+"""
+function fileio_load end
+function fileio_save end
+
+"""
     scan(fmt, src) -> (fileheader::Header, specs::Vector{FrameSpec})
 
 **The tier-1 extension point.** Parse metadata only — never pixel data — and describe each

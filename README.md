@@ -46,6 +46,8 @@ Fabio.info("scan.esperanto")             # a `fabio_info`-style dump
 |---|---|
 | Formats: Bruker (86, 100), CBF, DM3, d\*TREK/ADSC, EDF, Esperanto, Fit2D (binary, mask), GE, KCD, mar345, MPA, MRC, Netpbm, OXD, R-AXIS, SPE, TIFF/Pilatus/MarCCD, Xcalibur, NumPy | `src/formats/` |
 | HDF5 family: Eiger, LImA, Lambda, sparsify-Bragg, generic NeXus | `ext/FabioHDF5Ext.jl`, `ext/hdf5/` |
+| Writing, conversion, series, normalised metadata | `src/write.jl`, `src/series.jl`, `src/metadata.jl` |
+| FileIO.jl registration | `ext/FabioFileIOExt.jl` |
 | Codecs: raw, zlib blob, AGI bitfield, CBF byte-offset, mar345 PCK, Bruker overflow tables, Netpbm ASCII and packed bits, Fit2D chunked and bit-mask, R-AXIS photomultiplier, KCD readout summing, MPA ASCII, OXD TY1 and TY5 | `src/codecs.jl`, `src/agi.jl`, `src/byteoffset.jl`, `src/pck.jl`, `src/formats/` |
 | Byte sources: mmap, in-memory, `.gz` | `src/source.jl` |
 | Registry and detection | `src/registry.jl`, `src/detect.jl` |
@@ -221,6 +223,28 @@ format from the extension, `Fabio.convert(frame, EDF())`, and the `coerce` step 
 array to what a format can physically store — is Phase 4 and not yet built. `coerce` itself
 exists and is used: writing a Fit2D mask reduces any non-zero pixel to a bit, and Esperanto
 pads to a square whose side is a multiple of four.
+
+## FileIO.jl
+
+`using FileIO` registers this package's formats, so `load` and `save` work on them wherever
+FileIO is the common currency:
+
+```julia
+using Fabio, FileIO
+
+frame = load("scan.cbf")     # an ImageFrame — an AbstractArray carrying its header
+save("out.edf", frame)
+```
+
+Twenty formats are registered, generated from `Fabio.formats()` so the two cannot drift apart.
+The four FileIO already serves through other packages — `.tif`, `.npy`, `.h5` and the netpbm
+family — are deliberately left alone: someone loading those through FileIO wants the
+ecosystem's answer, not this one. They stay readable here through `Fabio.readimage`.
+
+Detection stays this package's own. FileIO picks a format from a flat table of magic bytes and
+extensions; Fabio then ignores that choice and detects the format itself, because its two-stage
+scheme knows things the flat table cannot express — three different detector formats share the
+`.img` extension, for one.
 
 ## Adding a format
 
