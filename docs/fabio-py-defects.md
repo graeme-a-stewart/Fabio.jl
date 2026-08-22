@@ -66,3 +66,14 @@ are why a comparison had to be done indirectly.
   `AttributeError: 'NoneType' object has no attribute 'shape'`. The Cython path handles the
   same file, but returns 0 rather than the dummy for masked pixels; this reader applies the
   dummy consistently, which is what `dummy` is for.
+- **`previous_filename` counts below zero.** `previous_filename("img_0000.edf")` returns
+  `img_-001.edf`: the number is decremented to −1 and then padded into the same four columns,
+  sign included. No such file can exist, so the error is deferred to whatever tries to open it.
+  This package throws instead, saying that there is nothing before the first file.
+- **`convert` carries the source's layout description into the target.** `converters.py` says of
+  itself that it "is for the moment empty (populated only with almost pass through anonymous
+  functions)", and its header table holds exactly one entry — EDF to EDF, the identity. So
+  converting an EDF to a CBF carries `Dim_1`, `Dim_2`, `DataType`, `ByteOrder` and `Size` into
+  the CBF, where they describe nothing: checked, and all five arrive. It is misleading rather
+  than corrupting — each format's writer regenerates its own — which is why this package strips
+  them by `layoutkeys` instead.

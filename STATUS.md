@@ -1,29 +1,48 @@
 # Status and handover
 
-Written at the close of Phase 3, as a place to pick the work up from. [README.md](README.md)
+Written at the close of Phase 4, as a place to pick the work up from. [README.md](README.md)
 is the user-facing description and [DESIGN.md](DESIGN.md) the architecture; this file is the
 working state that lives in neither.
 
 ## Where things stand
 
-**Status: Phase 3 complete.** 28 readers across 24 registry entries. Phases 0 through 3 of the
-roadmap in `DESIGN.md` are complete; Phase 4 is next.
+**Status: Phase 4 complete — the roadmap in `DESIGN.md` is finished.** 28 readers across 24
+registry entries, 15 of which also write, plus conversion, file series, normalised metadata,
+FileIO.jl registration and a command-line converter.
+
+All eleven use cases in `DESIGN.md` §16 now run as `test/usecases.jl`, none skipped. That was
+the completeness criterion §14 set at the outset: *"If the documented fabio examples all have
+working Julia counterparts, the port is functionally complete."*
 
 | | |
 |---|---|
-| source | ~7000 lines across `src/`, ~800 more in `ext/` |
-| tests | ~4500 lines, **948 assertions** in the self-contained suite |
+| source | 8384 lines across `src/`, 900 more in `ext/` |
+| tests | 5755 lines, **1569 assertions** in the self-contained suite |
 | committed fixtures | 228 KB across `test/data/{fabio,netpbm,tiff}` |
 | opt-in real-data assertions | several thousand more, depending on which datasets are present |
+| history | 40 commits, HEAD `c40858f` |
 
-Read-only: bruker, bruker100, cbf, dm3, dtrek, edf, esperanto, fit2d, ge, hdf5 (eiger, lima,
-lambda, sparse, generic), kcd, mar345, mpa, mrc, npy, oxd, pilatus, pnm, raxis, spe, tiff,
-xcalibur. Fifteen formats also have a `write*` function, though only marccd and fit2dmask
-declare `writer = true` in the registry; the rest were written to give the reader tests a
-fixture, and the unified `Fabio.write`/`convert` API is Phase 4. See the README.
+Read-only (9): bruker100, dm3, esperanto, hdf5 (eiger, lima, lambda, sparse, generic),
+mar345, oxd, pilatus, raxis, xcalibur. Read and write (15): bruker, cbf, dtrek, edf, fit2d,
+fit2dmask, ge, kcd, marccd, mpa, mrc, npy, pnm, spe, tiff.
+
+The registry's `writer` flag is **derived** from whether a `writeformat` method exists, not
+declared, and a test asserts the two agree for every format. It had drifted before that: it
+claimed two writable formats when fifteen could write.
 
 **Every reader has been checked against files this package did not write.**
 [docs/validation.md](docs/validation.md) says what each was checked against.
+
+### What Phase 4 added
+
+| | where | notes |
+|---|---|---|
+| `writeimage` | `src/write.jl` | one entry point over the 15 per-format writers; `writeformat` is the extension point |
+| `convertimage` | `src/write.jl` | `coerce` plus header translation; `layoutkeys` (15 methods) says which keys describe a file rather than an experiment |
+| `FileSeries` | `src/series.jl` | `open_series`, and filename arithmetic as a separate utility |
+| `ImageMetadata` | `src/metadata.jl` | `normalise`, 8 formats, SI units |
+| FileIO.jl | `ext/FabioFileIOExt.jl` | 20 formats registered, generated from the registry |
+| `fabio-convert` | `src/cli.jl`, `bin/fabio-convert` | FabIO's options and exit codes |
 
 ## Running the tests
 
@@ -48,15 +67,11 @@ FABIO_JL_FABIOTEST=/path/to/downloaded/fabio/testimages \
   julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-`FABIO_JL_HEXRD_EXAMPLES` now drives the real HDF5 tests as well as the GE ones. Comparing
-pixels in the real Eiger file needs its bitshuffle filter, which is not a test dependency:
-without `H5Zbitshuffle` installed the suite checks the file's structure, asserts that the read
-fails naming the filter, and logs that the pixels were not compared. With it, that testset goes
-from 23 assertions to 31. To run it that way:
-
-```bash
-julia --project=. -e 'using Pkg; Pkg.add("H5Zbitshuffle")'
-```
+`FABIO_JL_LOCAL_TESTDATA` and `FABIO_JL_KCD_TESTDATA` now also drive the real-file checks of
+the normalised-metadata layer, and `FABIO_JL_HEXRD_EXAMPLES` the real HDF5 tests as well as the
+GE ones. Comparing pixels in the real Eiger file needs its bitshuffle filter, which *is* a test
+dependency now (`H5Zbitshuffle` in the test target), taking that testset from 23 assertions
+to 31.
 
 `FABIO_JL_FABIOTEST` needs the archive fetched first — it is not on this machine permanently:
 
@@ -81,19 +96,28 @@ uv run --quiet --with fabio --with numpy --with h5py python3 -c "import fabio; .
 ```
 
 Set `UV_HTTP_TIMEOUT=300`; the default 30 s is not enough for its dependencies. The version
-validated against in Phase 3 was FabIO 2026.6.0.
+validated against in Phases 3 and 4 was FabIO 2026.6.0.
 
-Two habits worth keeping. Compare with a **position-sensitive checksum** — the sum of each value
-times its flat index — as well as minimum, maximum and sum, because a transposition or a
-reordered strip leaves all three aggregates unchanged. For the Eiger frames this is done in
-`BigInt` on both sides, so there is no floating-point slack at all. And **generate expected
-values from the reference implementation** rather than typing them; every time they were typed
-by hand in this work they were wrong, and in every such case the reader already agreed with
-FabIO.
+Three habits worth keeping.
+
+**Compare with a position-sensitive checksum** — the sum of each value times its flat index —
+as well as minimum, maximum and sum, because a transposition or a reordered strip leaves all
+three aggregates unchanged. For the Eiger frames this is done in `BigInt` on both sides, so
+there is no floating-point slack at all.
+
+**Generate expected values from the reference implementation** rather than typing them; every
+time they were typed by hand in this work they were wrong, and in every such case the reader
+already agreed with FabIO.
+
+**Prefer a check the physics can settle.** The metadata layer's units were confirmed by what
+the numbers turned out to be, not by reading a specification: Bruker's `WAVELEN` reads
+1.541840 Å, which is Cu Kα, and KCD's `Alpha1` reads 0.709300 Å, which is Mo Kα1. d\*TREK
+records its beam centre in millimetres, alone among these formats, and dividing by that file's
+pixel size puts it at pixel (1543, 1501) of a 3072-square detector — the middle. A wrong scale
+factor does not land on a characteristic emission line or at the centre of a detector.
 
 For HDF5 specifically, `FABIO_JL_H5_FIXTURE_DIR` makes `test_hdf5.jl` write its fixtures to a
-stable directory instead of a temporary one, which is how they were handed to FabIO. That is
-the reproducible route back to the cross-check:
+stable directory instead of a temporary one, which is how they were handed to FabIO:
 
 ```bash
 FABIO_JL_H5_FIXTURE_DIR=/tmp/h5fix julia --project=. -e 'using Pkg; Pkg.test()'
@@ -102,10 +126,13 @@ FABIO_JL_H5_FIXTURE_DIR=/tmp/h5fix julia --project=. -e 'using Pkg; Pkg.test()'
 FabIO reads seven of those fixtures and agrees on all 22 frames — but only through
 `fabio.open(path, frame=n)`, because the elder Eiger layout cannot be opened any other way, and
 only for the flavours whose detection does not depend on string attributes. LImA and sparse were
-cross-checked against h5py-written fixtures instead; see the string-attribute defect in the
-README. That asymmetry is a property of FabIO, not of the fixtures.
+cross-checked against h5py-written fixtures instead; see the string-attribute defect in
+[docs/fabio-py-defects.md](docs/fabio-py-defects.md). That asymmetry is a property of FabIO, not
+of the fixtures.
 
 ## Open questions
+
+Carried forward, and still true:
 
 - **No `*_master.h5` file was available.** The Eiger reader is validated against a data file
   with `/entry/data/data` directly. A master file reaches its data through external links and
@@ -129,7 +156,8 @@ README. That asymmetry is a property of FabIO, not of the fixtures.
 - **Compression is detected by extension, not magic.** A gzip or bzip2 file under a misleading
   name is not recognised — `100nmfilmonglass_1_1.img` above is exactly that case. FabIO has the
   same limitation. Detecting `BZh` and `\x1f\x8b` by magic would be a small, strictly better
-  change.
+  change. Note this now cuts both ways: `writeimage` compresses on a `.gz` destination, so the
+  two are at least symmetric.
 - **Tiled TIFF** is refused with a clear message but not implemented, as is **BigTIFF**.
 - **Compressed TIFF** (LZW, PackBits, Deflate) is not implemented; compression is per strip, so
   such files are also multi-strip.
@@ -142,33 +170,78 @@ README. That asymmetry is a property of FabIO, not of the fixtures.
   # UnsupportedFormatError: file "some.h5" is HDF5; run `using HDF5` to enable this reader
   ```
 
+New with Phase 4:
+
+- **Most writers are still "minimal".** Their own docstrings say so — "enough to round-trip data
+  and to give the test suite a dependency-free fixture". They write a correct file of the kind
+  the matching reader expects, and MarCCD's output has been read back by FabIO, but they do not
+  cover every option of every format. `writeimage` makes them reachable and uniform; it does not
+  make them complete. Deepening one is per-format work, and the natural next task.
+- **Bruker's `DISTANC` unit is taken from the format's documentation**, not from anything the
+  files here could prove: 4.996016 in the sample file is read as centimetres, giving 50 mm,
+  which is plausible for a lab source but not decisive. `CENTER` in pixels *is* confirmed by the
+  data (382 of 768 columns, 508 of 1024 rows).
+- **Bruker's pixel size is deliberately unset.** It is derivable from the pixels-per-centimetre
+  figure inside `DETTYPE`, but that field's layout varies by detector, and a wrong number would
+  be worse than `nothing`.
+- **`normalise` covers 8 formats of 24**, and timestamps only two (d\*TREK and Bruker). The
+  others return `nothing`, which is the documented and correct outcome, but there is easy work
+  here for anyone who wants a format covered.
+- **Type inference stops at the frame table.** `readframe` reaches its descriptor through
+  `ImageFile.frames::Vector{FrameSpec}`, whose parameter is abstract, so the element type is
+  recovered at run time rather than inferred. `DESIGN.md` §8 claims frames are inferred; that is
+  true of `pixeltype(file)` and of the layout fast path, not of `readframe`'s return type. The
+  cost is one dispatch per frame, against reading a whole frame, so it has been left alone —
+  but the design document overstates it.
+- **The CLI omits `-i/--interactive` and `--remove-destination`**, deliberately: prompting has
+  no place in something meant for pipelines, and `--force` covers the latter.
+
 ## What is next
 
-Phase 4, the parity polish: writers for the formats that lack them, the `coerce` matrix,
-`FileSeries`, FileIO.jl registration, `ImageMetadata`, and a `fabio-convert` equivalent. Of
-these, `FileSeries` is the one the design has the most to say about — §4.2 drops FabIO's
-ambiguous `next()` in favour of `open_series`, and §16.5–16.7 are written against it.
+The roadmap is complete, so what follows is a choice rather than a queue. In rough order of
+value:
 
-Also outstanding, and now the last piece of the acceptance criteria: the use-case suite in
-`DESIGN.md` §16 — every example from the FabIO documentation translated to Julia — was
-specified but never written as `test/usecases.jl`. §16.9 and §16.10 are HDF5 examples and are
-newly runnable as of this phase.
+1. **Deepen the writers.** The largest honest gap. `writeimage` is uniform over fifteen formats
+   whose writers are mostly fixture-grade; making EDF, CBF and TIFF genuinely complete
+   (multi-frame EDF, CBF's MD5 and CIF round-tripping, TIFF compression) would let the registry
+   claim them without the caveat the README currently carries.
+2. **Settle the open questions above that only need a file** — a non-square TY5, an `l`-type
+   Fit2D mask, a real LImA or Lambda file, an Eiger master file.
+3. **Detect compression by magic**, not extension. Small, strictly better, and FabIO shares the
+   limitation.
+4. **Registration and release.** The package has a UUID and a version of `0.1.0-DEV`; nothing
+   has been tagged or registered. Aqua.jl and JET.jl were named in `DESIGN.md` §14 and have
+   never been run.
+5. **Documentation.** There is no `docs/` build — Documenter.jl was in the original structure
+   sketch and is not set up. The docstrings are written for it.
+6. **Performance beyond the two codecs measured.** [docs/performance.md](docs/performance.md)
+   covers AGI bitfield and PCK only; nothing else has been profiled, and the threaded
+   bulk-conversion path in §16.8 has never been benchmarked against FabIO's ~28 frames/s.
 
 ## Process notes
 
-Three mistakes were made repeatedly in this work and are worth not repeating.
+Four mistakes were made repeatedly in this work and are worth not repeating.
 
 **Scripted edits that fail silently.** Several commits claimed README changes that never
 happened, because they used Python `str.replace`, which returns the text unchanged when the
 anchor does not match and reports nothing. Use `Edit`, which fails loudly, or assert the anchor
 matched before writing — `perl -0777 -i -pe '$n += s{...}{...}; die unless $n == 1'` does that
-and was used throughout Phase 3. The same failure hid a missing `include` in `runtests.jl` for a
-whole commit, so 36 tests that were claimed had never run.
+and was used throughout Phases 3 and 4. The same failure hid a missing `include` in
+`runtests.jl` for a whole commit, so 36 tests that were claimed had never run. A variant of it
+appeared again in Phase 4: a substitution matched *twice* and duplicated an `include` line,
+which only the printed result revealed.
 
 **Interpolation eaten by the editing tool.** The flip side of the above: a perl replacement is
-double-quoted, so `$file` and `@ref` inside the *replacement* text vanish silently. They must be
-escaped. This produced two broken strings in Phase 3 that were caught only by reading the result
-back, which is the argument for printing the changed region after every edit.
+double-quoted, so `$file`, `@ref` and `$(x)` inside the *replacement* text vanish silently. They
+must be escaped. This produced several broken strings across Phases 3 and 4 — including one in a
+`@warn` that then printed the mangled text at every load — and every one was caught only by
+reading the result back. Print the changed region after every edit.
+
+**Catching an exception and carrying on.** The FileIO extension's first version wrapped
+registration in a bare `catch ... continue`. It reported zero formats registered as though
+nothing had happened, and hid a real argument-type error for a round of testing. Warn, or let
+it throw; do not swallow. The warning is what then identified a genuine magic-number clash.
 
 **Numbers written from memory.** Reference values, test counts and totals were more than once
-stated without measuring. Measure them.
+stated without measuring. Measure them. Every number in this file was measured on the commit it
+describes.
