@@ -246,6 +246,27 @@ extensions; Fabio then ignores that choice and detects the format itself, becaus
 scheme knows things the flat table cannot express — three different detector formats share the
 `.img` extension, for one.
 
+## Command line
+
+A converter, after FabIO's `fabio-convert`:
+
+```bash
+bin/fabio-convert --output-format edf *.cbf
+bin/fabio-convert --list                        # the format table
+bin/fabio-convert -F mrc -o stacks/ --force *.spe
+```
+
+The shim is a one-line wrapper around the same entry point, so it works from Julia too:
+
+```julia
+exit(Fabio.main(["--output-format", "edf", "scan.cbf"]))
+```
+
+Options and exit codes follow `fabio-convert` — 0 success, 1 a conversion failed, 2 bad
+arguments — so a script written against it behaves the same here. `--force`, `--no-clobber`,
+`--update` and `--dry-run` all mean what they do in `cp`. Multi-frame files keep every frame,
+and each conversion goes through `convertimage`, so headers are translated rather than copied.
+
 ## Adding a format
 
 Most formats are "a header, then a typed binary blob". Those need one method — parse the

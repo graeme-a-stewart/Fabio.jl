@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# A shim for Fabio.jl's converter, after FabIO's `fabio-convert`.
+#
+#   fabio-convert --output-format edf *.cbf
+#
+# Set FABIO_JL_PROJECT to the environment holding Fabio.jl; it defaults to this repository.
+# Startup is dominated by Julia's own load time — for many files, prefer one invocation with
+# every filename over one invocation each.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec julia --project="${FABIO_JL_PROJECT:-$here}" --startup-file=no \
+    -e 'using Fabio; exit(Fabio.main(ARGS))' -- "$@"

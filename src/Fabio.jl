@@ -108,6 +108,7 @@ include("formats/xcalibur.jl")
 
 # After the formats: every `normalise` method dispatches on one of them.
 include("metadata.jl")
+include("cli.jl")
 
 export Bruker, CBF, DM3, Dtrek, EDF, OXD, Xcalibur, Esperanto, Fit2D, Fit2DMask, KCD, MPA, GE, Mar345, MRC, NexusLike, NPY, PNM, Raxis, SPE, TIFFLike
 

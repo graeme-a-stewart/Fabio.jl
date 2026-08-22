@@ -273,7 +273,38 @@ _upattern(::Type{T}, nx, ny, k = 0) where {T} =
 
     # -- 16.11 Command-line tools --------------------------------------------------------
     @testset "16.11 command-line tools" begin
-        # `Fabio.main()` and a fabio-convert equivalent are Phase 4 item 6.
-        @test_skip Fabio.main(["--list"]) == 0
+        # The documented invocation is
+        #     julia -e "using Fabio; exit(Fabio.main())" -- --output-format edf *.cbf
+        # which is `Fabio.main` with the arguments after `--`, plus the bin/fabio-convert shim.
+        out = IOBuffer()
+        @test Fabio.main(["--list"]; stdout = out, stderr = devnull) == 0
+        @test occursin("edf", String(take!(out)))
+
+        # The conversion the documented command line performs.
+        clidir = joinpath(UDIR, "cli")
+        mkpath(clidir)
+        for i = 1:3
+            Fabio.writeimage(
+                joinpath(clidir, "img_" * lpad(i, 3, Char(48)) * ".cbf"),
+                _upattern(UInt16, 9, 7, i),
+            )
+        end
+        inputs = sort(filter(endswith(".cbf"), readdir(clidir; join = true)))
+        code = Fabio.main(
+            vcat(["--output-format", "edf"], inputs);
+            stdout = devnull,
+            stderr = devnull,
+        )
+        @test code == 0
+        for i = 1:3
+            p = joinpath(clidir, "img_" * lpad(i, 3, Char(48)) * ".edf")
+            @test isfile(p)
+            @test collect(Fabio.readimage(p)) == _upattern(UInt16, 9, 7, i)
+        end
+
+        # The shell shim exists and is executable, since the documented usage names it.
+        shim = joinpath(dirname(dirname(pathof(Fabio))), "bin", "fabio-convert")
+        @test isfile(shim)
+        @test Sys.iswindows() || (filemode(shim) & 0o111) != 0
     end
 end
