@@ -25,8 +25,9 @@ julia = "1.10"
 [extras]
 H5Zbitshuffle = "51b4e782-877f-4ccf-958a-27bf628210da"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["H5Zbitshuffle", "HDF5", "Statistics", "Test"]
+test = ["H5Zbitshuffle", "HDF5", "Printf", "Statistics", "Test"]

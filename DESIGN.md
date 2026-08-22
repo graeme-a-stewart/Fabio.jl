@@ -15,7 +15,7 @@ of that pass. The Esperanto format is worked end-to-end in §15 against real fil
 
 **Goals**
 
-1. `Fabio.read("image.edf")` returns pixel data as an `Array{T,2}` with `T` the type actually
+1. `Fabio.readimage("image.edf")` returns pixel data as an `Array{T,2}` with `T` the type actually
    stored in the file (`UInt16`, `Int32`, `Float32`, …) — no silent conversion.
 2. Header metadata preserved with original keys, values and ordering.
 3. Many formats, discovered automatically from magic bytes and/or filename.
@@ -71,7 +71,7 @@ coerce(::ImageFormat, A) = A
 coerce(::Esperanto, A) = pad_square_mult4(round_to(Int32, A), 256, 4096)
 ```
 
-`Fabio.convert(frame, fmt)` = `coerce` + header translation, and `Fabio.write` calls `coerce`
+`Fabio.convertimage(frame, fmt)` = `coerce` + header translation, and `Fabio.writeimage` calls `coerce`
 so a direct write can never silently produce an invalid file.
 
 ### Correction 2 — frames need two indices and a back-link
@@ -253,7 +253,7 @@ multi-frame — which the fabio version does not.
 ### 4.3 Writing implies coercion
 
 Per Correction 1, the writer path is `coerce` → `translate headers` → `encode` → `emit`, with
-`coerce` defaulting to identity. `Fabio.write` and `Fabio.convert` share it, so
+`coerce` defaulting to identity. `Fabio.writeimage` and `Fabio.convertimage` share it, so
 `convert(frame, EDF())` and `write("x.esperanto", frame)` cannot diverge.
 
 ---
@@ -314,7 +314,8 @@ Fabio.closestate(::NexusLike, state)                      # optional
 Fabio.needs_random_access(::ImageFormat) = true   # false ⇒ can stream a .gz without buffering
 Fabio.refine(::TIFFLike, head, path, src)         # disambiguate a format family (§6)
 Fabio.coerce(::ImageFormat, A)                    # §4.3, write/convert numeric adaptation
-Fabio.writeframe(io, ::EDF, frame)                # opt-in writer
+Fabio.writeformat(::EDF, path, arrays, headers)   # opt-in writer (§4.3)
+Fabio.layoutkeys(::EDF)                           # keys describing how a format stores
 Fabio.normalise(::EDF, h::Header)                 # opt-in common-metadata mapping (§11)
 ```
 
@@ -362,7 +363,7 @@ Resolution order in `detectformat(head, path)`:
 4. Extension lookup, if no magic matched. (The docs are explicit that this is the fallback:
    "FabIO tries to deduce the actual format from the file itself and only uses extensions as
    a fallback if that fails.")
-5. Last resort: try each candidate's `scan` in priority order, under `Fabio.open(path; trial=true)`.
+5. Last resort: try each candidate's `scan` in priority order, under `Fabio.openimage(path; trial=true)`.
 
 `Magic` carries an offset, so formats whose signature is not at byte 0 need no hacks.
 
@@ -402,17 +403,17 @@ The element type is a *runtime* value from the header, so `read` cannot be type-
 boundary. That is fine if the instability is confined to one call, so the design puts a
 **function barrier at open time**:
 
-- `Fabio.open(path)` scans headers, learns `T`, and constructs `ImageFile{F,S,X,T,N}` — one
+- `Fabio.openimage(path)` scans headers, learns `T`, and constructs `ImageFile{F,S,X,T,N}` — one
   dynamic dispatch, once per file.
 - Everything after is inferred: `file[i] :: ImageFrame{T,2,Array{T,2}}`, and user loops over
   frames are fully typed.
 - Heterogeneous multi-frame files (legal in EDF) get `T = Any`; those users opt into
-  `Fabio.read(path, Float32)`.
+  `Fabio.readimage(path, Float32)`.
 
 ```julia
 Fabio.eltype(path)                # header-only, no pixel read
-Fabio.read(path, Float32)         # always Array{Float32,2}, stable
-Fabio.read!(dest::Array, file, i) # zero-allocation read into a preallocated buffer
+Fabio.readimage(path, Float32)         # always Array{Float32,2}, stable
+Fabio.readframe!(dest::Array, file, i) # zero-allocation read into a preallocated buffer
 ```
 
 `decode` dispatch is closed over a `Union` of the ~10 supported element types, so the dynamic
@@ -509,9 +510,9 @@ file[i]; length(file); for frame in file … end     # AbstractVector interface
 Fabio.framestack(file)      -> Array{T,3}          # all frames as a cube
 
 # --- writing -----------------------------------------------------------------
-Fabio.write(path, frame; format=nothing)           # format from extension if omitted
-Fabio.write(path, frames::AbstractVector{<:ImageFrame})
-Fabio.convert(frame, EDF())                        # coerce + header translation (§4.3)
+Fabio.writeimage(path, frame; format=nothing)           # format from extension if omitted
+Fabio.writeimage(path, frames::AbstractVector{<:ImageFrame})
+Fabio.convertimage(frame, EDF())                        # coerce + header translation (§4.3)
 
 # --- series ------------------------------------------------------------------
 Fabio.open_series(paths)                           # or first = "img_0001.edf"
@@ -627,7 +628,7 @@ struct TruncatedFileError     <: FabioError end   # fabio's `incomplete_file`
 ```
 
 Truncated files are common with detectors writing live (fabio has explicit handling for
-partial gzip blocks in EDF). `Fabio.open(path; strict=false)` returns whatever frames scanned
+partial gzip blocks in EDF). `Fabio.openimage(path; strict=false)` returns whatever frames scanned
 cleanly and sets `file.truncated = true`; the default is strict, so silent data loss is opt-in.
 
 **Concurrency**: an `ImageFile` holds mutable I/O state and is not thread-safe — document it,
@@ -765,7 +766,7 @@ image.close()
 ```
 ```julia
 using Fabio, Statistics
-Fabio.open("image.tif") do file
+Fabio.openimage("image.tif") do file
     frame = file[1]
     display(header(frame))
     println(mean(frame))          # ImageFrame <: AbstractArray, so `mean` just works
@@ -781,9 +782,9 @@ img.data *= 200.0/srcur
 img.write('normed_0001.edf')
 ```
 ```julia
-frame = Fabio.read("exampleimage0001.edf")
+frame = Fabio.readimage("exampleimage0001.edf")
 srcur = getheader(header(frame), "ESRFCurrent", Float64)
-Fabio.write("normed_0001.edf", frame .* (200.0 / srcur))
+Fabio.writeimage("normed_0001.edf", frame .* (200.0 / srcur))
 ```
 Note this is a case where `coerce` (§4.3) earns its keep: `frame .* Float64` produces a
 `Float64` array, and the EDF writer records `DataType = DoubleValue` rather than silently
@@ -796,7 +797,7 @@ image = fabio.open("my.tiff")
 image.convert("edf").save("my.edf")
 ```
 ```julia
-Fabio.write("my.edf", Fabio.convert(Fabio.read("my.tiff"), EDF()))
+Fabio.writeimage("my.edf", Fabio.convertimage(Fabio.readimage("my.tiff"), EDF()))
 ```
 
 ### 16.4 Display
@@ -870,7 +871,7 @@ files = sort(filter(endswith(".cbf"), readdir(srcdir; join=true)))
 mkpath(dstdir)
 Threads.@threads for f in files                     # mmap sources are thread-safe (§13)
     dst = joinpath(dstdir, first(splitext(basename(f))) * ".edf")
-    Fabio.write(dst, Fabio.convert(Fabio.read(f), EDF()))
+    Fabio.writeimage(dst, Fabio.convertimage(Fabio.readimage(f), EDF()))
 end
 ```
 The tutorial reports ~28 frames/s single-threaded in Python; this is the natural benchmark to
@@ -885,9 +886,9 @@ for idx, frame in enumerate(images):
 ```
 ```julia
 using HDF5                                   # activates FabioHDF5Ext
-Fabio.open("collect_01_00001_master.h5") do images
+Fabio.openimage("collect_01_00001_master.h5") do images
     for (i, frame) in enumerate(images)
-        Fabio.write(@sprintf("collect_01_00001_%04d.cbf", i),
+        Fabio.writeimage(@sprintf("collect_01_00001_%04d.cbf", i),
                     ImageFrame(parent(frame), detectorheader, i, i, nothing); format = CBF())
     end
 end
@@ -897,9 +898,9 @@ end
 
 ```julia
 using TiffImages
-src = Fabio.open("sample_water0000.h5")
-Fabio.write("sample_water0000.tiff", collect(src))     # multi-frame writer
-dst = Fabio.open("sample_water0000.tiff")
+src = Fabio.openimage("sample_water0000.h5")
+Fabio.writeimage("sample_water0000.tiff", collect(src))     # multi-frame writer
+dst = Fabio.openimage("sample_water0000.tiff")
 for i in 1:length(src)
     a, b = src[i], dst[i]
     @assert a == b                                      # the tutorial's final check
@@ -930,7 +931,7 @@ padding, §4.3) that tool becomes straightforward to port later.
 | **1** ✅ | `ByteOffset` + **CBF**; `PCK` + **mar345**; the **TIFF family** (plain, Pilatus, MarCCD) in the core rather than an extension; **ADSC/d\*TREK**, **Bruker 86 and 100**. | Done. TIFF turned out to be mostly tier 1 — see the note below — and multi-strip TIFF is what exercises tier 2. |
 | **2** ✅ | **OXD** (TY1, TY5), **GE**, **Netpbm**, **MRC**, **SPE**, **Fit2D** binary and mask, **KCD**, **R-AXIS**, **MPA**, **DM3**, **Xcalibur**. | Done, all tier 1. Xcalibur had no reader in FabIO to port — its `read` is unmodified template boilerplate that raises — so this one is new work rather than a translation. |
 | **3** ✅ | HDF5 family via ext: **Eiger, Lima, Lambda, sparse, generic NeXus**, incl. `file.h5::/path` URLs. | Done. The weak-dependency design and tier 2 both worked as written; see below. |
-| **4** ⬅ next | Writers, `convert`/`coerce` matrix, `FileSeries`, FileIO.jl registration, `ImageMetadata`, `fabio-convert` CLI. | Parity polish. |
+| **4** ⬅ in progress | `writeimage` over the per-format writers ✅, `convertimage` + the `coerce`/`layoutkeys` matrix ✅, §16 as `test/usecases.jl` ✅; `FileSeries`, FileIO.jl registration, `ImageMetadata` and a `fabio-convert` CLI still to do. | Parity polish. |
 
 **What phase 3 confirmed.** This was the phase the two-tier design existed for, and it needed
 no new mechanism. `refine` returning a more specific format — added in phase 2 so SPE could
@@ -986,6 +987,8 @@ per-format work, which is the point of the architecture.
 4. **`ImageFrame <: AbstractArray`** — recommended yes; it is what makes §16.1–16.10 read as
    naturally as the Python.
 5. ~~Name collisions~~ — **settled during implementation**: path-based entry points are
-   `openimage` / `readimage` / `readframe!` / `framestack`, because methods on
-   `Base.open(::AbstractString)` and `Base.read(::AbstractString)` would be piracy. Nothing
-   exported shadows `Base`.
+   `openimage` / `readimage` / `writeimage` / `convertimage` / `readframe!` / `framestack`,
+   because methods on `Base.open(::AbstractString)` and `Base.read(::AbstractString)` would be
+   piracy. `writeimage` is the same decision one step further on: `Base.write(filename, x)`
+   already writes a plain array as raw bytes, so a method on it for `AbstractMatrix` would
+   change what existing code does rather than add to it. Nothing exported shadows `Base`.
