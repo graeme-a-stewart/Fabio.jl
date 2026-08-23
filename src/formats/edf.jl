@@ -219,64 +219,133 @@ function _partialscan(fmt::EDF, src::AbstractSource)
     end
     return (fileheader, specs)
 end
-
 """
-    edfheadertext(A, header=Header(); padto=512) -> String
+    edfheadertext(A, header=Header(); kwargs...) -> String
 
 Build the ASCII header block for one EDF frame, padded to a multiple of `padto` bytes as
-readers expect. Exposed because the test suite writes EDF files to read them back.
+readers expect.
+
+The fields, and their order, are the ones FabIO writes, so a file from here is a file of the
+kind FabIO produces: `EDF_DataBlockID`, `EDF_BinarySize`, `EDF_HeaderSize`, `ByteOrder`,
+`DataType`, `Dim_1`, `Dim_2`, `Image`, `HeaderID`, `Size`, and then whatever else the caller
+supplied.
+
+- `index` - 0-based frame number, which appears in three of those fields
+- `binarysize` - bytes of stored data, which is not `length(A) * sizeof(T)` once compressed
+- `compression` - `:none` or `:zlib`
+
+`EDF_HeaderSize` states the size of the block it sits inside, so it is written in a
+fixed-width field whose value is worked out from the lengths either side of it rather than by
+searching the finished text for a placeholder.
 """
 function edfheadertext(
     A::AbstractArray{T,2},
     header::Header = Header();
     padto::Int = 512,
     byteorder::ByteOrder = NativeByteOrder(),
+    index::Integer = 0,
+    binarysize::Integer = length(A) * sizeof(T),
+    compression::Symbol = :none,
 ) where {T}
-    haskey(EDF_TYPE_NAMES, T) ||
-        throw(UnsupportedFormatError("EDF cannot store $T"))
-    io = IOBuffer()
-    print(io, "{\n")
-    print(io, "HeaderID = EH:000001:000000:000000 ;\n")
-    print(io, "ByteOrder = ", byteorder isa LittleEndian ? "LowByteFirst" : "HighByteFirst", " ;\n")
-    print(io, "DataType = ", EDF_TYPE_NAMES[T], " ;\n")
-    print(io, "Dim_1 = ", size(A, 1), " ;\n")
-    print(io, "Dim_2 = ", size(A, 2), " ;\n")
-    print(io, "Size = ", length(A) * sizeof(T), " ;\n")
+    haskey(EDF_TYPE_NAMES, T) || throw(UnsupportedFormatError("EDF cannot store $T"))
+    compression in (:none, :zlib) ||
+        throw(UnsupportedFormatError("EDF compression $(repr(compression)) is not supported"))
+
+    head = IOBuffer()
+    print(head, "{\n")
+    print(head, "EDF_DataBlockID = ", index, ".Image.Psd ;\n")
+    print(head, "EDF_BinarySize = ", binarysize, " ;\n")
+    print(head, "EDF_HeaderSize = ")
+    prefix = String(take!(head))
+
+    tail = IOBuffer()
+    print(tail, " ;\n")
+    print(tail, "ByteOrder = ", byteorder isa LittleEndian ? "LowByteFirst" : "HighByteFirst", " ;\n")
+    print(tail, "DataType = ", EDF_TYPE_NAMES[T], " ;\n")
+    print(tail, "Dim_1 = ", size(A, 1), " ;\n")
+    print(tail, "Dim_2 = ", size(A, 2), " ;\n")
+    compression === :none || print(tail, "Compression = Zlib ;\n")
+    print(tail, "Image = ", index, " ;\n")
+    print(tail, "HeaderID = EH:", lpad(index, 6, '0'), ":000000:000000 ;\n")
+    print(tail, "Size = ", binarysize, " ;\n")
     # The keys above are generated from the array, so a caller's stale copy of them must not
     # follow: EDF has no notion of a duplicate key, the reader keeps the last one seen, and a
     # header carried over from a differently shaped file would otherwise describe this one.
     for (k, v) in striplayoutkeys(EDF(), header)
-        print(io, k, " = ", v, " ;\n")
+        print(tail, k, " = ", v, " ;\n")
     end
-    body = String(take!(io))
-    # The closing brace and newline must fall on the padding boundary.
-    len = length(body) + 2
-    pad = mod(-len, padto)
-    return body * " "^pad * "}\n"
+    rest = String(take!(tail))
+
+    # The closing brace and newline must fall on the padding boundary, and the size field is a
+    # fixed width, so the total is known before the number is written into it.
+    fixed = length(prefix) + EDF_HEADERSIZE_WIDTH + length(rest) + 2
+    total = fixed + mod(-fixed, padto)
+    return prefix *
+           lpad(total, EDF_HEADERSIZE_WIDTH) *
+           rest *
+           " "^(total - fixed) *
+           "}\n"
 end
 
-"""
-    writeedf(path, A, header=Header())
+"""Width of the `EDF_HeaderSize` field, wide enough for any header a detector writes."""
+const EDF_HEADERSIZE_WIDTH = 8
 
-Minimal single-frame EDF writer: enough to round-trip data and to give the test suite a
-dependency-free fixture. The full writer (multi-frame, compression, `convert`) is Phase 4.
 """
-function writeedf(path::AbstractString, A::AbstractArray{T,2}, header::Header = Header()) where {T}
+    writeedf(path, A, header=Header(); compression=:none, byteorder=..., padto=512)
+    writeedf(path, arrays, headers=...; compression=:none, byteorder=..., padto=512)
+
+Write an EDF file, of one frame or many.
+
+EDF is a sequence of independent `{ header } data` blocks, which is why a multi-frame file
+needs nothing more than writing several of them: the reader walks from one to the next using
+each block's own `EDF_BinarySize`.
+
+`compression = :zlib` deflates each frame's data and records `Compression = Zlib`. FabIO
+cannot do this - its `EdfImage.write` takes no compression argument and its source never
+mentions one - though its reader handles such files, so what this writes stays readable there.
+"""
+function writeedf(
+    path::AbstractString,
+    arrays::AbstractVector,
+    headers::AbstractVector = [Header() for _ in arrays];
+    compression::Symbol = :none,
+    byteorder::ByteOrder = NativeByteOrder(),
+    padto::Int = 512,
+)
+    isempty(arrays) && throw(ArgumentError("writeedf needs at least one frame"))
+    length(headers) == length(arrays) ||
+        throw(ArgumentError("got $(length(arrays)) frames and $(length(headers)) headers"))
     Base.open(path, "w") do io
-        Base.write(io, codeunits(edfheadertext(A, header)))
-        Base.write(io, encode(RawBlob(), A))
+        for (i, A) in enumerate(arrays)
+            raw = encode(RawBlob(), A)
+            blob = compression === :zlib ? transcode(ZlibCompressor, raw) : raw
+            text = edfheadertext(
+                A,
+                headers[i];
+                padto = padto,
+                byteorder = byteorder,
+                index = i - 1,
+                binarysize = length(blob),
+                compression = compression,
+            )
+            Base.write(io, codeunits(text))
+            Base.write(io, blob)
+        end
     end
     return path
 end
 
-"""Generic write entry point. See [`writeformat`](@ref)."""
-writeformat(fmt::EDF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
-    writeone(writeedf, fmt, path, arrays, headers; kwargs...)
+writeedf(path::AbstractString, A::AbstractArray{<:Any,2}, header::Header = Header(); kwargs...) =
+    writeedf(path, [A], [header]; kwargs...)
+
+"""Generic write entry point. EDF is natively multi-frame. See [`writeformat`](@ref)."""
+writeformat(::EDF, path::AbstractString, arrays::AbstractVector, headers::AbstractVector; kwargs...) =
+    writeedf(path, arrays, collect(Header, headers); kwargs...)
 
 """The keys `writeedf` generates from the array itself. See [`layoutkeys`](@ref)."""
 layoutkeys(::EDF) = (
     "HeaderID", "ByteOrder", "DataType", "Dim_1", "Dim_2", "Size", "Compression",
-    "EDF_BinarySize", "EDF_HeaderSize",
+    "EDF_BinarySize", "EDF_HeaderSize", "EDF_DataBlockID", "Image",
 )
 
 """EDF stores every type this package knows. See [`storagetypes`](@ref)."""

@@ -77,3 +77,9 @@ are why a comparison had to be done indirectly.
   the CBF, where they describe nothing: checked, and all five arrive. It is misleading rather
   than corrupting — each format's writer regenerates its own — which is why this package strips
   them by `layoutkeys` instead.
+- **A single-frame EDF cannot be opened by frame number.** `fabio.open("one.edf", frame=0)`
+  raises `FileNotFoundError: 'one0000.edf'`: with only one frame in the file, the frame request
+  falls through to the filename arithmetic and goes looking for a *file* number zero. Plain
+  `fabio.open("one.edf")` works, and a single-frame CBF accepts `frame=0` without complaint, so
+  this is EDF's frame handling rather than a general rule. It matters when iterating a mixed
+  set of files by frame index, which is the natural way to write such a loop.

@@ -95,9 +95,13 @@ _wpattern(::Type{T}, nx, ny, k = 0) where {T} =
                 end
             end
         end
-        # A single-frame format says so rather than dropping frames silently.
-        @test_throws ArgumentError writeimage(joinpath(WDIR, "many.edf"), frames)
+        # A single-frame format says so rather than dropping frames silently. EDF is not one:
+        # it is a sequence of independent blocks and writes as many as it is given.
+        @test_throws ArgumentError writeimage(joinpath(WDIR, "many.cbf"), frames)
+        @test_throws ArgumentError writeimage(joinpath(WDIR, "many.msk"), frames)
         @test_throws ArgumentError writeimage(joinpath(WDIR, "none.edf"), [])
+        writeimage(joinpath(WDIR, "many.edf"), frames)
+        @test Fabio.openimage(length, joinpath(WDIR, "many.edf")) == 3
     end
 
     @testset "coerce is in the write path" begin
@@ -304,5 +308,105 @@ end
                 T in stored && @test eltype(coerced) === T
             end
         end
+    end
+end
+
+@testset "EDF, in depth" begin
+    EDIR = mktempdir()
+    _epat(k) = UInt16[UInt16(x + 61 * y + 1009 * k) for x = 1:7, y = 1:5]
+    frames = [_epat(k) for k = 1:3]
+
+    @testset "multi-frame" begin
+        # EDF is a sequence of independent `{ header } data` blocks, so a multi-frame file is
+        # simply several of them. The reader has always handled this; the writer used to
+        # refuse, which was the largest asymmetry between the two.
+        p = joinpath(EDIR, "multi.edf")
+        writeimage(p, frames)
+        Fabio.openimage(p) do f
+            @test length(f) == 3
+            for k = 1:3
+                @test collect(f[k]) == frames[k]
+                @test f[k].fileindex == k
+            end
+        end
+        # The per-frame fields FabIO writes, and their 0-based numbering.
+        h2 = Fabio.readheader(p; frame = 2)
+        @test Fabio.getci(h2, "EDF_DataBlockID") == "1.Image.Psd"
+        @test Fabio.getci(h2, "Image") == "1"
+        @test Fabio.getci(h2, "HeaderID") == "EH:000001:000000:000000"
+
+        # One frame is still one block.
+        p1 = joinpath(EDIR, "one.edf")
+        writeimage(p1, frames[1])
+        @test length(collect(eachmatch(r"EDF_DataBlockID", String(read(p1))))) == 1
+        @test collect(Fabio.readimage(p1)) == frames[1]
+
+        @test_throws ArgumentError Fabio.writeedf(joinpath(EDIR, "none.edf"), Matrix{UInt16}[])
+        @test_throws ArgumentError Fabio.writeedf(
+            joinpath(EDIR, "mismatch.edf"), frames, [Header()])
+    end
+
+    @testset "compression" begin
+        # The reader has always accepted Compression = Zlib/Gzip/Deflate; the writer can now
+        # produce it. FabIO can read such files but cannot write them.
+        p = joinpath(EDIR, "zlib.edf")
+        writeimage(p, frames; compression = :zlib)
+        Fabio.openimage(p) do f
+            @test length(f) == 3
+            for k = 1:3
+                @test collect(f[k]) == frames[k]
+            end
+        end
+        @test Fabio.getci(Fabio.readheader(p), "Compression") == "Zlib"
+        # The recorded size is the *stored* size, which is what lets the reader find the next
+        # block; getting this wrong is how a multi-frame compressed file loses its way.
+        h = Fabio.readheader(p)
+        @test parse(Int, Fabio.getci(h, "EDF_BinarySize")) < 7 * 5 * sizeof(UInt16) * 2
+
+        # Real detector data compresses; the point of the option.
+        flat = [fill(UInt16(7), 256, 256)]
+        big, small = joinpath(EDIR, "flat.edf"), joinpath(EDIR, "flat_z.edf")
+        writeimage(big, flat)
+        writeimage(small, flat; compression = :zlib)
+        @test filesize(small) < filesize(big) ÷ 10
+        @test collect(Fabio.readimage(small)) == flat[1]
+
+        @test_throws Fabio.UnsupportedFormatError writeimage(
+            joinpath(EDIR, "bad.edf"), frames; compression = :lzma)
+    end
+
+    @testset "the header block describes itself truthfully" begin
+        # EDF_HeaderSize states the size of the block it sits inside, which is circular: the
+        # number's own width changes the block. It is written into a fixed-width field whose
+        # value is computed from the lengths either side, so it must come out exact.
+        for padto in (512, 1024), extra in (0, 40)
+            h = Header()
+            for i = 1:extra
+                h["Key$i"] = "value $i"
+            end
+            p = joinpath(EDIR, "hdr_$(padto)_$(extra).edf")
+            Fabio.writeedf(p, frames[1], h; padto = padto)
+            raw = String(read(p))
+            stated = parse(Int, Fabio.getci(Fabio.readheader(p), "EDF_HeaderSize"))
+            actual = findfirst("}\n", raw)[end]
+            @test stated == actual
+            @test stated % padto == 0
+            @test collect(Fabio.readimage(p)) == frames[1]
+        end
+    end
+
+    @testset "a carried frame index does not duplicate" begin
+        # The same trap layoutkeys exists for: EDF_DataBlockID and Image are generated per
+        # frame, so a header carried from frame 3 must not describe the file it lands in.
+        src = joinpath(EDIR, "carry_src.edf")
+        writeimage(src, frames)
+        third = Fabio.readimage(src; frame = 3)
+        @test Fabio.getci(header(third), "EDF_DataBlockID") == "2.Image.Psd"
+        dst = joinpath(EDIR, "carry_dst.edf")
+        writeimage(dst, third)
+        raw = String(read(dst))
+        @test length(collect(eachmatch(r"EDF_DataBlockID", raw))) == 1
+        @test Fabio.getci(Fabio.readheader(dst), "EDF_DataBlockID") == "0.Image.Psd"
+        @test collect(Fabio.readimage(dst)) == frames[3]
     end
 end
