@@ -13,6 +13,7 @@ using TranscodingStreams: transcode
 
 const TMP = mktempdir()
 
+include("test_quality.jl")
 include("test_header.jl")
 include("test_registry.jl")
 include("test_npy.jl")

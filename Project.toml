@@ -20,20 +20,31 @@ FabioFileIOExt = "FileIO"
 FabioHDF5Ext = "HDF5"
 
 [compat]
+Aqua = "0.8"
+Base64 = "1"
 CodecZlib = "0.7"
+Dates = "1"
 FileIO = "1"
+H5Zbitshuffle = "0.1"
 HDF5 = "0.17"
+JET = "0.12"
+Mmap = "1"
 OrderedCollections = "1"
+Printf = "1"
+Statistics = "1"
+Test = "1"
 TranscodingStreams = "0.10, 0.11"
 julia = "1.10"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 H5Zbitshuffle = "51b4e782-877f-4ccf-958a-27bf628210da"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["FileIO", "H5Zbitshuffle", "HDF5", "Printf", "Statistics", "Test"]
+test = ["Aqua", "FileIO", "H5Zbitshuffle", "HDF5", "JET", "Printf", "Statistics", "Test"]

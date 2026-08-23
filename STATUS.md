@@ -187,6 +187,15 @@ New with Phase 4:
 - **`normalise` covers 8 formats of 24**, and timestamps only two (d\*TREK and Bruker). The
   others return `nothing`, which is the documented and correct outcome, but there is easy work
   here for anyone who wants a format covered.
+- **JET reports 43 issues on whole-package analysis, all of them false.** Two kinds, both
+  examined: a `Union{Nothing,T}` the code has already correlated away — an `occursin` test for a separator
+  guarding a later `findfirst` — and Base container constructors explored for argument types
+  that never arrive, reached through the `local specs::Vector{FrameSpec}` annotation in
+  `_openimage`. That annotation is a real contract check for out-of-tree `scan` methods and is
+  not worth deleting to quiet an analyser. `test_quality.jl` therefore asserts that the twelve
+  entry points which *are* clean stay clean, rather than asserting a report count that would
+  be a number to update rather than a test. JET tracks Julia internals, so a new Julia version
+  may move these figures.
 - **Type inference stops at the frame table.** `readframe` reaches its descriptor through
   `ImageFile.frames::Vector{FrameSpec}`, whose parameter is abstract, so the element type is
   recovered at run time rather than inferred. `DESIGN.md` §8 claims frames are inferred; that is
@@ -210,8 +219,9 @@ value:
 3. **Detect compression by magic**, not extension. Small, strictly better, and FabIO shares the
    limitation.
 4. **Registration and release.** The package has a UUID and a version of `0.1.0-DEV`; nothing
-   has been tagged or registered. Aqua.jl and JET.jl were named in `DESIGN.md` §14 and have
-   never been run.
+   has been tagged or registered. Aqua and JET now run as part of the suite, and the missing
+   `[compat]` bounds Aqua found — which on their own would have kept the package out of the
+   General registry — are filled in.
 5. **Documentation.** There is no `docs/` build — Documenter.jl was in the original structure
    sketch and is not set up. The docstrings are written for it.
 6. **Performance beyond the two codecs measured.** [docs/performance.md](docs/performance.md)
