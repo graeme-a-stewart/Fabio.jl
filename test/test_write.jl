@@ -410,3 +410,107 @@ end
         @test collect(Fabio.readimage(dst)) == frames[3]
     end
 end
+
+@testset "MD5" begin
+    # RFC 1321 section A.5's own test suite. The last one is 80 bytes, which crosses a block
+    # boundary, and the first is empty, which is entirely padding — the two cases a hand-rolled
+    # digest gets wrong.
+    vectors = [
+        ("", "d41d8cd98f00b204e9800998ecf8427e"),
+        ("a", "0cc175b9c0f1b6a831c399e269772661"),
+        ("abc", "900150983cd24fb0d6963f7d28e17f72"),
+        ("message digest", "f96b697d7cb7938d525a2f31aaf161d0"),
+        ("abcdefghijklmnopqrstuvwxyz", "c3fcd3d76192e4007dfb496cca67e13b"),
+        ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+         "d174ab98d277d9f5a5611c2c9f419d9f"),
+        ("12345678901234567890123456789012345678901234567890123456789012345678901234567890",
+         "57edf4a22be3c955ac49da2e2107b67a"),
+    ]
+    for (input, want) in vectors
+        @test Fabio.md5hex(input) == want
+    end
+    # Every length across a block boundary, so the padding arithmetic is exercised at each
+    # offset rather than only at the two the RFC happens to cover.
+    for n in 0:130
+        @test length(Fabio.md5(rand(UInt8, n))) == 16
+    end
+    @test Fabio.md5base64("abc") == "kAFQmDzST7DWlj99KOF/cg=="
+end
+
+@testset "CBF, in depth" begin
+    CBDIR = mktempdir()
+    A = Int32[Int32(3x + 7y) for x = 1:9, y = 1:6]
+    h = Header()
+    h["Title"] = "a scan"
+    h["Exposure_time"] = "0.5 s"
+    h["Wavelength"] = "1.0332 A"
+
+    @testset "the free-form header lives in a CIF value, and is read back out" begin
+        # Detectors, and FabIO, keep a CBF's header inside `_array_data.header_contents` as a
+        # block of `# key value` lines. FabIO reports that block as one opaque string, so a
+        # Pilatus CBF's exposure time is in the file but not reachable as a header entry.
+        p = joinpath(CBDIR, "meta.cbf")
+        writeimage(p, A; header = h)
+        raw = String(read(p))
+        @test occursin("_array_data.header_contents", raw)
+        @test occursin("# Title a scan", raw)
+
+        back = Fabio.readimage(p)
+        @test collect(back) == A
+        @test Fabio.getci(header(back), "Title") == "a scan"
+        @test Fabio.getci(header(back), "Exposure_time") == "0.5 s"
+        # The raw block is kept alongside the keys taken out of it.
+        @test occursin("# Title a scan", Fabio.getci(header(back), "_array_data.header_contents"))
+
+        # Which is what makes the normalised metadata layer work on a CBF at all.
+        m = Fabio.normalise(back)
+        @test m.exposure_time == 0.5
+        @test m.wavelength ≈ 1.0332e-10
+    end
+
+    @testset "a CIF text field spanning lines" begin
+        # `_name` alone on a line, value between two semicolons. The parser had no notion of
+        # this, so a header written the way the format specifies read back empty.
+        p = joinpath(CBDIR, "textfield.cbf")
+        writeimage(p, A; header = h)
+        got = Fabio.getci(Fabio.readheader(p), "_array_data.header_contents")
+        @test got !== nothing
+        @test count(l -> startswith(strip(l), "#"), split(got, ['\n', '\r'])) == 3
+    end
+
+    @testset "Content-MD5 and padding" begin
+        p = joinpath(CBDIR, "digest.cbf")
+        writeimage(p, A)
+        hh = Fabio.readheader(p)
+        @test Fabio.getci(hh, "Content-MD5") !== nothing
+        @test Fabio.getci(hh, "X-Binary-Size-Padding") == "1"
+        @test Fabio.verifychecksum(p) === true
+
+        # Flipping one byte of the compressed blob is caught without decoding it.
+        raw = read(p)
+        i = findfirst(==(0xD5), raw)
+        raw[i+10] = xor(raw[i+10], 0xFF)
+        bad = joinpath(CBDIR, "corrupt.cbf")
+        write(bad, raw)
+        @test Fabio.verifychecksum(bad) === false
+
+        # A file with no digest is legal, and says so rather than failing.
+        nodigest = joinpath(CBDIR, "nodigest.cbf")
+        write(nodigest, replace(String(read(p)), r"Content-MD5:[^\n]*\n" => ""))
+        @test Fabio.verifychecksum(nodigest) === missing
+        @test collect(Fabio.readimage(nodigest)) == A
+
+        # Padding is written and skipped over.
+        for pad in (0, 1, 7)
+            q = joinpath(CBDIR, "pad$pad.cbf")
+            Fabio.writecbf(q, A, Header(); padding = pad)
+            @test Fabio.getci(Fabio.readheader(q), "X-Binary-Size-Padding") == string(pad)
+            @test collect(Fabio.readimage(q)) == A
+            @test Fabio.verifychecksum(q) === true
+        end
+        @test_throws ArgumentError Fabio.writecbf(joinpath(CBDIR, "neg.cbf"), A, Header(); padding = -1)
+
+        @test_throws ArgumentError Fabio.verifychecksum(
+            (Fabio.writeimage(joinpath(CBDIR, "notcbf.edf"), A); joinpath(CBDIR, "notcbf.edf")))
+    end
+end

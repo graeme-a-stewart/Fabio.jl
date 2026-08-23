@@ -47,6 +47,7 @@ using CodecZlib: GzipDecompressor, GzipCompressor, ZlibDecompressor, ZlibCompres
 using TranscodingStreams: transcode
 import Mmap
 using Dates: DateTime, @dateformat_str
+using Base64: base64encode, base64decode
 
 export ImageFrame,
     ImageFile,
@@ -69,6 +70,7 @@ export ImageFrame,
     readheaders
 
 include("types.jl")
+include("md5.jl")
 include("header.jl")
 include("frame.jl")
 include("source.jl")

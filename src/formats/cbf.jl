@@ -29,6 +29,9 @@ struct CBF <: ImageFormat end
 const CBF_STARTER = UInt8[0x0C, 0x1A, 0x04, 0xD5]
 const CBF_SECTION = "--CIF-BINARY-FORMAT-SECTION--"
 
+"""The CIF value in which detectors, and FabIO, keep a CBF's free-form header."""
+const CBF_HEADER_CONTENTS = "_array_data.header_contents"
+
 const CBF_DATA_TYPES = Dict{String,DataType}(
     "signed 8-bit integer" => Int8,
     "signed 16-bit integer" => Int16,
@@ -123,22 +126,71 @@ at — predictable, and it never silently drops real metadata. Typed interpretat
 values belongs with `normalise`, not here.
 """
 function _cbf_parse_cif!(h::Header, text::AbstractString)
-    for raw in split(text, '\n')
-        line = strip(raw)
-        isempty(line) && continue
+    lines = split(text, '\n')
+    i = firstindex(lines)
+    while i <= lastindex(lines)
+        line = strip(lines[i])
+        if isempty(line)
+            i += 1
+            continue
+        end
         if startswith(line, '_')
             parts = split(line, limit = 2)
             key = String(parts[1])
-            h[key] = length(parts) == 2 ? String(strip(parts[2], [' ', '\t', '\'', '"'])) : ""
+            if length(parts) == 2 && !isempty(strip(parts[2]))
+                h[key] = String(strip(parts[2], [' ', '\t', '\'', '"']))
+            else
+                # A CIF text field: the value is the lines between two semicolons in the
+                # first column. This is how a header long enough to matter is written, and
+                # how this package writes one.
+                body = String[]
+                j = i + 1
+                if j <= lastindex(lines) && startswith(lines[j], ';')
+                    j += 1
+                    while j <= lastindex(lines) && !startswith(lines[j], ';')
+                        push!(body, rstrip(lines[j], ['\r']))
+                        j += 1
+                    end
+                    h[key] = join(body, "\n")
+                    i = j + 1
+                    continue
+                end
+                h[key] = ""
+            end
         elseif startswith(line, '#')
             body = strip(line, ['#', ' ', '\t'])
-            isempty(body) && continue
-            parts = split(body, limit = 2)
-            length(parts) == 2 || continue
-            key = String(rstrip(parts[1], ':'))
-            isempty(key) && continue
-            h[key] = String(strip(parts[2]))
+            if !isempty(body)
+                parts = split(body, limit = 2)
+                if length(parts) == 2
+                    key = String(rstrip(parts[1], ':'))
+                    isempty(key) || (h[key] = String(strip(parts[2])))
+                end
+            end
         end
+        i += 1
+    end
+    # A CBF's free-form header lives inside one CIF value, as a block of `# key value` lines.
+    # Detectors write it there and so does FabIO, which then reports the whole block as a
+    # single opaque string — meaning a Pilatus CBF's exposure time, wavelength and beam centre
+    # are present in the file but not reachable as header entries. They are expanded here, and
+    # the raw value is kept alongside.
+    contents = getci(h, CBF_HEADER_CONTENTS)
+    contents === nothing || _cbf_expand_contents!(h, String(contents))
+    return h
+end
+
+"""Turn a `# key value` block from `_array_data.header_contents` into header entries."""
+function _cbf_expand_contents!(h::Header, text::AbstractString)
+    for raw in split(text, ['\n', '\r'])
+        line = strip(raw)
+        (isempty(line) || !startswith(line, '#')) && continue
+        body = strip(line, ['#', ' ', '\t'])
+        isempty(body) && continue
+        parts = split(body, limit = 2)
+        length(parts) == 2 || continue
+        key = String(rstrip(parts[1], ':'))
+        (isempty(key) || haskey(h, key)) && continue
+        h[key] = String(strip(parts[2]))
     end
     return h
 end
@@ -173,41 +225,62 @@ Minimal single-frame CBF writer using the byte-offset codec — enough to round-
 give the test suite a fixture that needs nothing downloaded. The full writer (MD5, padding,
 CIF round-tripping) is Phase 4.
 """
-function writecbf(path::AbstractString, A::AbstractArray{T,2}, header::Header = Header()) where {T}
+function writecbf(
+    path::AbstractString,
+    A::AbstractArray{T,2},
+    header::Header = Header();
+    padding::Integer = 1,
+    binaryid::Integer = 1,
+) where {T}
     haskey(CBF_TYPE_NAMES, T) || throw(UnsupportedFormatError("CBF cannot store $T"))
+    padding >= 0 || throw(ArgumentError("padding must not be negative"))
     blob = encode(ByteOffset(), A)
+
     io = IOBuffer()
-    print(io, "###CBF: VERSION 1.5\n\n")
+    print(io, "###CBF: VERSION 1.5, Fabio.jl\n\n")
     print(io, "data_fabio_jl\n\n")
+    # Metadata goes where the detectors put it and where FabIO puts it: a single CIF value
+    # holding a block of `# key value` lines. Writing them as bare comments instead, as this
+    # did, leaves them invisible to any CIF reader.
+    rest = Pair{String,Any}[]
+    contents = String[]
     for (k, v) in striplayoutkeys(CBF(), header)
-        # A bare `key value` line is neither a CIF data name nor a comment, so the reader —
-        # ours and any other — skips it, and the metadata is written but unreadable. A name
-        # that is already a CIF one is written as it stands; anything else goes in the comment
-        # block, which is where Pilatus puts its header and where the reader looks for it.
-        if startswith(String(k), "_")
-            print(io, k, " ", v, "\n")
-        else
-            print(io, "# ", k, " ", v, "\n")
-        end
+        key = String(k)
+        key == CBF_HEADER_CONTENTS && continue
+        startswith(key, "_") ? push!(rest, key => v) : push!(contents, "# $key $v")
     end
-    print(io, "\n_array_data.data\n;\n")
+    if !isempty(contents)
+        print(io, CBF_HEADER_CONTENTS, "\n;\n", join(contents, "\r\n"), "\r\n;\n\n")
+    end
+    for (k, v) in rest
+        print(io, k, " ", v, "\n")
+    end
+
+    print(io, "_array_data.data\n;\n")
     print(io, CBF_SECTION, "\n")
     print(io, "Content-Type: application/octet-stream;\n")
     print(io, "     conversions=\"x-CBF_BYTE_OFFSET\"\n")
     print(io, "Content-Transfer-Encoding: BINARY\n")
     print(io, "X-Binary-Size: ", length(blob), "\n")
-    print(io, "X-Binary-ID: 1\n")
+    print(io, "X-Binary-ID: ", binaryid, "\n")
     print(io, "X-Binary-Element-Type: \"", CBF_TYPE_NAMES[T], "\"\n")
     print(io, "X-Binary-Element-Byte-Order: LITTLE_ENDIAN\n")
+    # The digest covers the compressed bytes, which is what the reader has in hand before it
+    # decodes anything, and so what it can check.
+    print(io, "Content-MD5: ", md5base64(blob), "\n")
     print(io, "X-Binary-Number-of-Elements: ", length(A), "\n")
     print(io, "X-Binary-Size-Fastest-Dimension: ", size(A, 1), "\n")
     print(io, "X-Binary-Size-Second-Dimension: ", size(A, 2), "\n")
-    print(io, "X-Binary-Size-Padding: 0\n\n")
+    print(io, "X-Binary-Size-Padding: ", padding, "\n\n")
+
     Base.open(path, "w") do f
         Base.write(f, take!(io))
         Base.write(f, CBF_STARTER)
         Base.write(f, blob)
-        Base.write(f, codeunits("\n;\n\n"))
+        padding > 0 && Base.write(f, zeros(UInt8, padding))
+        # The trailer CBF specifies, and the one FabIO writes: the section marker closed with
+        # two extra dashes, then the CIF text-field terminator.
+        Base.write(f, codeunits("\r\n" * CBF_SECTION * "--\r\n;\n\n"))
     end
     return path
 end
@@ -226,3 +299,31 @@ layoutkeys(::CBF) = (
 
 """The byte-offset codec is integer-only. See [`storagetypes`](@ref)."""
 storagetypes(::CBF) = Tuple(sort!(collect(keys(CBF_TYPE_NAMES)); by = string))
+
+"""
+    verifychecksum(path) -> Union{Bool,Missing}
+
+Check a CBF's `Content-MD5` against the binary section it describes.
+
+`missing` when the file records no digest, which is legal and common. The digest covers the
+*compressed* bytes, so this detects a truncated or damaged blob without decoding it.
+
+A checksum nothing ever checks is decoration, which is the state CBF readers tend to leave it
+in — FabIO reports the field and never verifies it.
+
+```julia
+Fabio.verifychecksum("scan.cbf")   # true, false, or missing
+```
+"""
+function verifychecksum(path::AbstractString)
+    return openimage(path) do file
+        file.format isa CBF ||
+            throw(ArgumentError("verifychecksum is for CBF files, not $(nameof(typeof(file.format)))"))
+        spec = file.frames[1]
+        stated = getci(spec.header, "Content-MD5")
+        stated === nothing && return missing
+        layout = spec.layout
+        raw = bytes(file.source, layout.offset, layout.nbytes)
+        return md5base64(collect(raw)) == strip(String(stated))
+    end
+end
