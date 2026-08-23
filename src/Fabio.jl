@@ -11,7 +11,10 @@ using Fabio, Statistics
 
 frame = Fabio.readimage("image.edf")
 mean(frame)                                    # an ImageFrame is an AbstractArray
-getheader(header(frame), "ESRFCurrent", Float64)
+
+hdr = header(frame)                      # a dictionary of the metadata
+hdr["Dim_1"]                             # "2048" — as recorded, so a String here
+getheader(hdr, "ESRFCurrent", Float64)   # 200.567 — found and converted in one step
 
 Fabio.openimage("series.edf") do file          # multi-frame files are AbstractVectors
     for f in file
