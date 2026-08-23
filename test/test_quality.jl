@@ -16,6 +16,15 @@ using JET
     end
 
     @testset "JET" begin
+        # JET reaches into Julia's compiler internals and refuses to run at all on a
+        # prerelease, saying so and pointing at a JET_DEV_MODE preference. Nightly is in the
+        # CI matrix, so the analysis is skipped there rather than failing the build over a
+        # tool that has declined to work.
+        if !isempty(VERSION.prerelease)
+            @info "Skipping JET on a prerelease Julia" version = VERSION
+            @test true
+            return
+        end
         # Whole-package analysis is deliberately *not* asserted here. `JET.report_package`
         # returns 43 reports on this package and every one examined is a false positive of the
         # same two kinds:

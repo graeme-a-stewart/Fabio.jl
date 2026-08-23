@@ -149,11 +149,12 @@ writege(path::AbstractString, A::AbstractArray{<:Any,2}; kwargs...) = writege(pa
 
 function writege(
     path::AbstractString,
-    frames::AbstractVector{<:AbstractArray{T,2}};
+    frames::AbstractVector{<:AbstractMatrix};
     headerbytes::Int = GE_DEFAULT_HEADER_BYTES,
     blanked::Bool = false,
-) where {T}
+)
     isempty(frames) && throw(ArgumentError("writege needs at least one frame"))
+    T = eltype(first(frames))
     depth = findfirst(==(T), GE_DEPTH_TYPES)
     depth === nothing && throw(UnsupportedFormatError("GE cannot store $T"))
     cols, rows = size(first(frames))

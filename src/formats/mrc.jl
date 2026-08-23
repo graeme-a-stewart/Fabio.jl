@@ -153,10 +153,11 @@ writemrc(path::AbstractString, A::AbstractArray{<:Any,2}; kwargs...) =
 
 function writemrc(
     path::AbstractString,
-    frames::AbstractVector{<:AbstractArray{T,2}};
+    frames::AbstractVector{<:AbstractMatrix};
     labels::AbstractVector{<:AbstractString} = String[],
-) where {T}
+)
     isempty(frames) && throw(ArgumentError("writemrc needs at least one section"))
+    T = eltype(first(frames))
     mode = findfirst(==(T), MRC_MODES)
     mode === nothing && throw(UnsupportedFormatError("MRC cannot store $T"))
     nx, ny = size(first(frames))

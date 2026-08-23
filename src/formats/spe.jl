@@ -123,12 +123,13 @@ writespe(path::AbstractString, A::AbstractArray{<:Any,2}; kwargs...) = writespe(
 
 function writespe(
     path::AbstractString,
-    frames::AbstractVector{<:AbstractArray{T,2}};
+    frames::AbstractVector{<:AbstractMatrix};
     exposure::Real = 0.0,
     date::AbstractString = "",
     time::AbstractString = "",
-) where {T}
+)
     isempty(frames) && throw(ArgumentError("writespe needs at least one frame"))
+    T = eltype(first(frames))
     code = findfirst(==(T), SPE_DATA_TYPES)
     code === nothing && throw(UnsupportedFormatError("SPE cannot store $T"))
     d1, d2 = size(first(frames))

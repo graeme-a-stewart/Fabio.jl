@@ -454,14 +454,15 @@ end
 
 function writetiff(
     path::AbstractString,
-    arrays::AbstractVector{<:AbstractArray{T,2}};
+    arrays::AbstractVector{<:AbstractMatrix};
     description::AbstractString = "",
     bigendian::Bool = false,
     rowsperstrip::Int = 0,
     stripgap::Int = 0,
     mindataoffset::Int = 0,
-) where {T}
+)
     isempty(arrays) && throw(ArgumentError("writetiff needs at least one image"))
+    T = eltype(first(arrays))
     bits = 8 * sizeof(T)
     fmt = T <: AbstractFloat ? 3 : (T <: Signed ? 2 : 1)
     swap = bigendian != (NativeByteOrder === BigEndian)
