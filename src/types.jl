@@ -29,6 +29,15 @@ struct FlipSlow <: Orientation end   # reverse the second (slow) Julia axis
 
 # ---------------------------------------------------------------------------- errors
 
+"""
+    FabioError <: Exception
+
+Supertype of every error this package raises deliberately.
+
+Catching this catches a file being unreadable — unrecognised, truncated, inconsistent, or in a
+format whose reader is not loaded — while letting a genuine bug through rather than swallowing
+it.
+"""
 abstract type FabioError <: Exception end
 
 """Raised when no registered format matches a file."""

@@ -7,11 +7,11 @@ The CCP4 `pck` codec as used by mar345 image plates.
 
 The stream is a series of blocks. Each block opens with a 6-bit header read LSB-first:
 the low three bits give `1 << n` values in the block, the next three index
-[`PCK_BIT_COUNT`](@ref) for the bit width of each value. A width of zero means a run of
+`PCK_BIT_COUNT` for the bit width of each value. A width of zero means a run of
 zeros. Values are packed at that width and sign-extended.
 
 Those values are not pixels but differences from the truncated mean of four already-decoded
-neighbours, so [`pck_postdecode!`](@ref) reconstructs the image. Counts above 65535 do not fit
+neighbours, so `pck_postdecode!` reconstructs the image. Counts above 65535 do not fit
 and are carried separately in an overflow table, which in a mar345 file sits *before* the
 packed stream; the format hands it to the codec here, the same way [`AGIBitfield`](@ref)
 receives its row index.

@@ -23,7 +23,7 @@ is the record kind:
 
 An array record is followed by `NNNNNNNN` payload blocks. Array types are `i` for `Int32`, `r`
 for `Float32`, and `l` for a bit mask packed 31 pixels to an `Int32` — see
-[`Fit2DBitmask`](@ref). The image itself is the record named `data_array`.
+`Fit2DBitmask`. The image itself is the record named `data_array`.
 
 # Byte order
 

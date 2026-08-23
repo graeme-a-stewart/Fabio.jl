@@ -29,3 +29,9 @@ JuliaLocalPreferences.toml
 
 # Scratch space...
 scratch/
+
+# Documentation pages staged from the repository root by docs/make.jl
+docs/src/index.md
+docs/src/validation.md
+docs/src/performance.md
+docs/src/fabio-py-defects.md

@@ -1,0 +1,8 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Fabio = "f0d449d7-56f0-43af-ab75-7373cb75cfe2"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+
+[compat]
+Documenter = "1"

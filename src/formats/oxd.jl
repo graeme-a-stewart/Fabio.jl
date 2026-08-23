@@ -15,12 +15,12 @@ with byte escapes, and an uncompressed variant.
 
 # The two codecs
 
-[`OxdTY1`](@ref) stores one byte per pixel holding a difference from the *running total*,
+`OxdTY1` stores one byte per pixel holding a difference from the *running total*,
 biased by 127, with two escapes: a byte of 254 takes the next value from a separate `Int16`
 table and 255 from an `Int32` table. Both tables follow the byte plane, sized by `OI` and `OL`.
 The image is the cumulative sum over the whole frame.
 
-[`OxdTY5`](@ref) is a single interleaved stream — the escapes sit inline rather than in tables
+`OxdTY5` is a single interleaved stream — the escapes sit inline rather than in tables
 — and its differences are **per row**, restarting at zero on each new row rather than
 accumulating across the frame.
 

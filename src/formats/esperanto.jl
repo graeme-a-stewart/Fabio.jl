@@ -21,7 +21,7 @@ its keep.
 
 # Header keys
 
-Each line's fields are named by [`ESPERANTO_KEYS`](@ref) and decoded by their name's first
+Each line's fields are named by `ESPERANTO_KEYS` and decoded by their name's first
 letter — `l`/`i`/`b` integer, `d` float, otherwise a quoted string — the same convention FabIO
 uses. Both the raw line and the decoded fields land in the header, so nothing is lost.
 """

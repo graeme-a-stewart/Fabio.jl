@@ -27,7 +27,7 @@ last, so neither a thumbnail nor a long text tag can win.
 
 # Large arrays are not loaded into the header
 
-An array of more than [`DM3_INLINE_LIMIT`](@ref) elements is recorded by shape and offset
+An array of more than `DM3_INLINE_LIMIT` elements is recorded by shape and offset
 rather than read, so opening a file does not pull its thumbnail and image into the header
 alongside the frame.
 """

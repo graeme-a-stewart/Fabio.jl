@@ -21,7 +21,7 @@ records and patched in afterwards — the same shape of problem as mar345's over
 handled the same way, by giving the codec the table the scan already read.
 
 `FORMAT:100` keeps its counts in a narrow base image plus up to three padded correction
-tables; see [`Bruker100Blob`](@ref).
+tables; see `Bruker100Blob`.
 """
 struct Bruker{Version} <: ImageFormat end
 
