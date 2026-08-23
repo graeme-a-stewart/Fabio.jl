@@ -248,3 +248,61 @@ end
         @test count(==("Dim_1"), [strip(first(split(l, '='))) for l in split(text, ';') if occursin('=', l)]) == 1
     end
 end
+
+@testset "the storage contract" begin
+    # For every writable format and every element type, exactly one of three things must
+    # happen, and the third is the point of the test:
+    #
+    #   1. the write succeeds and what `coerce` produced is what reads back, or
+    #   2. it is refused with an UnsupportedFormatError naming the format,
+    #
+    # and never
+    #
+    #   3. a bare MethodError from a per-format writer two calls down, or a value silently
+    #      reinterpreted as another type — a signed pixel read back unsigned, say.
+    #
+    # The invariant in (1) is `readimage(writeimage(A)) == coerce(fmt, A)`: coercion is what
+    # decides the stored values, so it is what the file must contain.
+    SDIR = mktempdir()
+    alltypes = (UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64, Float32, Float64)
+
+    for e in Fabio.formats()
+        canwrite(e.format) || continue
+        fmt = e.format
+        stored = Fabio.storagetypes(fmt)
+        @testset "$(e.name)" begin
+            @test !isempty(stored)                    # a writable format declares what it holds
+            for T in alltypes
+                # Small positive values, so nothing is out of range for any format here; the
+                # question is which types are accepted, not what clipping does.
+                A = T[T(1) T(2); T(3) T(4)]
+                p = joinpath(SDIR, "contract_$(e.name)_$T")
+                local coerced
+                try
+                    coerced = Fabio.coerce(fmt, A)
+                catch err
+                    @test err isa Fabio.FabioError    # refusing in coerce is allowed
+                    continue
+                end
+                ok = try
+                    writeimage(p, A; format = fmt)
+                    true
+                catch err
+                    # A refusal must be this package's own error, naming the format —
+                    # never a MethodError leaking an internal function name.
+                    @test err isa Fabio.UnsupportedFormatError
+                    false
+                end
+                ok || continue
+
+                back = Fabio.readimage(p; format = fmt)
+                @test eltype(back) in stored
+                @test collect(back) == coerced
+                # A type the format stores outright is not retyped on the way in. The values
+                # may still change: a Fit2D mask coerces by meaning, not by type, reducing
+                # every non-zero pixel to a bit.
+                T in stored && @test eltype(coerced) === T
+            end
+        end
+    end
+end

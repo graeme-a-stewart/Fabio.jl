@@ -117,3 +117,6 @@ writeformat(fmt::Fit2DMask, path::AbstractString, arrays::AbstractVector, header
 
 """A mask header is only its shape. See [`layoutkeys`](@ref)."""
 layoutkeys(::Fit2DMask) = ("SUBFORMAT", "Dim_1", "Dim_2")
+
+"""A mask is one bit per pixel, read back as `UInt8`. See [`storagetypes`](@ref)."""
+storagetypes(::Fit2DMask) = (UInt8,)

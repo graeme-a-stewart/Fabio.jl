@@ -159,3 +159,6 @@ writeformat(fmt::Dtrek, path::AbstractString, arrays::AbstractVector, headers::A
 
 """The keys `writedtrek` generates from the array itself. See [`layoutkeys`](@ref)."""
 layoutkeys(::Dtrek) = ("HEADER_BYTES", "DIM", "BYTE_ORDER", "Data_type", "SIZE1", "SIZE2")
+
+"""See [`storagetypes`](@ref)."""
+storagetypes(::Dtrek) = Tuple(sort!(collect(keys(DTREK_TYPE_NAMES)); by = string))

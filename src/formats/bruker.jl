@@ -482,3 +482,9 @@ writeformat(fmt::Bruker{86}, path::AbstractString, arrays::AbstractVector, heade
 layoutkeys(::Bruker) = (
     "FORMAT", "VERSION", "HDRBLKS", "NROWS", "NCOLS", "NPIXELB", "NOVERFL", "datastart",
 )
+
+"""Bruker stores unsigned pixels of 1, 2 or 4 bytes. See [`storagetypes`](@ref)."""
+storagetypes(::Bruker) = (UInt8, UInt16, UInt32)
+
+"""Bruker stores unsigned pixels; see [`narrowstorage`](@ref) for how the width is chosen."""
+coerce(fmt::Bruker, A::AbstractArray{<:Any,2}) = narrowstorage(fmt, A)

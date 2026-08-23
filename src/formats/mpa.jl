@@ -165,3 +165,6 @@ writeformat(fmt::MPA, path::AbstractString, arrays::AbstractVector, headers::Abs
 
 """The MPA fields that give the array its shape and encoding. See [`layoutkeys`](@ref)."""
 layoutkeys(::MPA) = ("mpafmt", "ADC1_range", "ADC2_range", "DataMarker")
+
+"""The MPA reader returns counts as `Float64`. See [`storagetypes`](@ref)."""
+storagetypes(::MPA) = (Float64,)

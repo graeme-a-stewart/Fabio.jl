@@ -223,3 +223,6 @@ layoutkeys(::CBF) = (
     "X-Binary-Number-of-Elements", "X-Binary-Size-Fastest-Dimension",
     "X-Binary-Size-Second-Dimension", "X-Binary-Size-Padding",
 )
+
+"""The byte-offset codec is integer-only. See [`storagetypes`](@ref)."""
+storagetypes(::CBF) = Tuple(sort!(collect(keys(CBF_TYPE_NAMES)); by = string))

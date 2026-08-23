@@ -271,3 +271,78 @@ function convertimage(frame::ImageFrame, fmt::ImageFormat)
         format = fmt,
     )
 end
+
+# ------------------------------------------------------------------- storage contract
+
+"""
+    storagetypes(fmt) -> Tuple{Vararg{DataType}}
+
+The element types that survive a write and read back **unchanged** through `fmt`.
+
+This is the writer's half of the contract [`coerce`](@ref) enforces. Anything in this tuple is
+stored as it stands; anything else is either converted to one of these by `coerce`, saying so
+when the conversion loses information, or refused with an [`UnsupportedFormatError`](@ref)
+naming the format. What must never happen is the third thing — a bare `MethodError` from some
+per-format writer two calls down, or worse, a value silently reinterpreted as another type.
+
+Derived from each reader's own type table wherever the reader hands back what the file stores,
+so the two cannot drift. A few formats transform on read — KCD sums its readouts into `Int32`,
+MPA is `Float64` by construction — and those say so explicitly below.
+
+Empty for a format with no writer.
+"""
+storagetypes(::ImageFormat) = ()
+
+"""
+    narrowstorage(fmt, A) -> Array
+
+Convert `A` to the narrowest of `fmt`'s [`storagetypes`](@ref) that holds its values.
+
+This is the body of most `coerce` methods. A float array is rounded first; a value that fits
+nowhere is clamped to the widest type's range rather than wrapped, because wrapping turns a
+minimum into a maximum, which is the worst possible way for image data to be wrong. Both steps
+say so when they happen.
+
+Choosing by the data rather than by the input type is what the formats themselves do: Bruker
+records a `NPIXELB` byte width, GE a bit depth, Netpbm a `MAXVAL`. Writing `Int32[1 2; 3 4]` as
+one byte per pixel is not a loss, it is the format being used properly.
+"""
+function narrowstorage(fmt::ImageFormat, A::AbstractArray{T,2}) where {T}
+    stored = storagetypes(fmt)
+    isempty(stored) && throw(
+        UnsupportedFormatError("$(nameof(typeof(fmt))) declares no storage types"),
+    )
+    T in stored && return A
+
+    ints = filter(S -> S <: Integer, collect(stored))
+    if T <: AbstractFloat && !isempty(filter(S -> S <: AbstractFloat, stored))
+        # A float format taking a float: widen or narrow, never round.
+        F = first(sort!(filter(S -> S <: AbstractFloat, collect(stored)); by = sizeof))
+        return convert(Array{F}, A)
+    end
+    isempty(ints) && return convert(Array{first(stored)}, A)
+
+    B = A
+    if T <: AbstractFloat
+        @info "$(nameof(typeof(fmt))) stores integers; rounding" from = T
+        B = round.(A)
+    end
+    lo, hi = isempty(B) ? (0.0, 0.0) : (Float64(minimum(B)), Float64(maximum(B)))
+    sort!(ints; by = sizeof)
+    S = something(
+        findfirst(x -> Float64(typemin(x)) <= lo && hi <= Float64(typemax(x)), ints),
+        0,
+    )
+    target = S == 0 ? last(ints) : ints[S]
+    if S == 0
+        @warn "$(nameof(typeof(fmt))) cannot hold these values; clamping" range = (lo, hi) to =
+            target
+    end
+    return [_clampto(target, x) for x in B]
+end
+
+"""Convert one value to `S`, clamping rather than wrapping."""
+@inline function _clampto(::Type{S}, x) where {S<:Integer}
+    x < 0 && return zero(S) <= typemin(S) ? S(typemin(S)) : zero(S)
+    return x > typemax(S) ? typemax(S) : S(x)
+end

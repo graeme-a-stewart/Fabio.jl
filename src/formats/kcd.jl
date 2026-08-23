@@ -153,3 +153,9 @@ writeformat(fmt::KCD, path::AbstractString, arrays::AbstractVector, headers::Abs
 
 """KCD's shape and readout count. See [`layoutkeys`](@ref)."""
 layoutkeys(::KCD) = ("X dimension", "Y dimension", "Data type", "Number of readouts")
+
+"""A KCD file stores unsigned 16-bit readouts, which the reader sums into `Int32`."""
+storagetypes(::KCD) = (Int32,)
+
+"""The KCD writer stores integer readouts. See [`narrowstorage`](@ref)."""
+coerce(fmt::KCD, A::AbstractArray{<:Any,2}) = narrowstorage(fmt, A)

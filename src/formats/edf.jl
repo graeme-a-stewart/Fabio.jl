@@ -278,3 +278,6 @@ layoutkeys(::EDF) = (
     "HeaderID", "ByteOrder", "DataType", "Dim_1", "Dim_2", "Size", "Compression",
     "EDF_BinarySize", "EDF_HeaderSize",
 )
+
+"""EDF stores every type this package knows. See [`storagetypes`](@ref)."""
+storagetypes(::EDF) = Tuple(sort!(collect(keys(EDF_TYPE_NAMES)); by = string))

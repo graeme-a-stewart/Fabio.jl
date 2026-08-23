@@ -208,3 +208,6 @@ layoutkeys(::MRC) = (
     "NX", "NY", "NZ", "MODE", "MAPC", "MAPR", "MAPS", "MACHST", "MAP", "ByteOrder",
     "NSYMBT", "NLABL", "FrameIndex",
 )
+
+"""MRC2014 modes 0, 1, 2 and 6. See [`storagetypes`](@ref)."""
+storagetypes(::MRC) = (Int8, Int16, UInt16, Float32)

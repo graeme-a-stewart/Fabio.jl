@@ -194,3 +194,6 @@ layoutkeys(::GE) = (
     "NumberOfRowsInFrame", "NumberOfColsInFrame", "ImageDepthInBits", "HeaderBlanked",
     "FrameIndex",
 )
+
+"""GE records a bit depth, and its pixels are unsigned. See [`storagetypes`](@ref)."""
+storagetypes(::GE) = Tuple(sort!(collect(values(GE_DEPTH_TYPES)); by = string))

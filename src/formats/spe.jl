@@ -171,3 +171,6 @@ SPE's shape and storage fields.
 they describe the measurement and should survive a conversion. See [`layoutkeys`](@ref).
 """
 layoutkeys(::SPE) = ("version", "x_dim", "y_dim", "data_type", "xml_offset", "num_frames", "FrameIndex")
+
+"""WinSpec's four data-type codes. See [`storagetypes`](@ref)."""
+storagetypes(::SPE) = Tuple(sort!(collect(values(SPE_DATA_TYPES)); by = string))

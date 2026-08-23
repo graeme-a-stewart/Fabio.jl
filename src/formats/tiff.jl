@@ -654,3 +654,9 @@ layoutkeys(::TIFFLike{:marccd}) = (
     "nfast", "nslow", "depth", "data_type", "origin", "orientation",
     "over_8_bits", "over_16_bits",
 )
+
+"""Baseline TIFF carries bit depth and sample format, so anything round-trips."""
+storagetypes(::TIFFLike) = (UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64, Float32, Float64)
+
+"""MarCCD is 16-bit unsigned counts, and nothing else. See [`storagetypes`](@ref)."""
+storagetypes(::TIFFLike{:marccd}) = (UInt16,)

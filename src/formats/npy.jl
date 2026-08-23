@@ -133,3 +133,6 @@ writeformat(fmt::NPY, path::AbstractString, arrays::AbstractVector, headers::Abs
 
 """The three fields of a `.npy` header, all describing the buffer. See [`layoutkeys`](@ref)."""
 layoutkeys(::NPY) = ("descr", "fortran_order", "shape")
+
+"""NumPy carries its dtype, so anything round-trips. See [`storagetypes`](@ref)."""
+storagetypes(::NPY) = Tuple(sort!(collect(values(NPY_DTYPES)); by = string))

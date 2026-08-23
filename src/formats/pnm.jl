@@ -235,3 +235,9 @@ writeformat(fmt::PNM, path::AbstractString, arrays::AbstractVector, headers::Abs
 
 """Netpbm's header is nothing but layout. See [`layoutkeys`](@ref)."""
 layoutkeys(::PNM) = ("SUBFORMAT", "WIDTH", "HEIGHT", "MAXVAL")
+
+"""Netpbm stores unsigned 8- or 16-bit samples. See [`storagetypes`](@ref)."""
+storagetypes(::PNM) = (UInt8, UInt16)
+
+"""Netpbm samples are unsigned 8- or 16-bit. See [`narrowstorage`](@ref)."""
+coerce(fmt::PNM, A::AbstractArray{<:Any,2}) = narrowstorage(fmt, A)

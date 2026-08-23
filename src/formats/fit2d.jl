@@ -304,3 +304,6 @@ writeformat(fmt::Fit2D, path::AbstractString, arrays::AbstractVector, headers::A
 
 """Fit2D's record bookkeeping. See [`layoutkeys`](@ref)."""
 layoutkeys(::Fit2D) = ("BlockSize", "ByteOrder", "\$FFF_START", "data_array_dims", "ImageRecord")
+
+"""Fit2D's data_array record is `Int32` or `Float32`. See [`storagetypes`](@ref)."""
+storagetypes(::Fit2D) = (Int32, Float32)
