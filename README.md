@@ -296,8 +296,16 @@ that do not need it.
 
 ## Tests
 
+It is recommended to install the `TestEnv` package in the base Julia environment, then
+
 ```bash
-julia --project=. -e 'using Pkg; Pkg.test()'
+julia --project test/runtests.jl
+```
+
+will run all tests. Otherwise, this alternative will always work:
+
+```bash
+julia --project -e 'using Pkg; Pkg.test()'
 ```
 
 The suite is self-contained: it writes its own fixtures rather than downloading anything. Real
