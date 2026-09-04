@@ -297,7 +297,13 @@ that do not need it.
 ## Tests
 
 ```bash
-julia --project=. -e 'using Pkg; Pkg.test()'
+julia --project -e 'using Pkg; Pkg.test()'
+```
+
+or, if the `TestEnv` package is available
+
+```bash
+julia --project test/runtests.jl
 ```
 
 The suite is self-contained: it writes its own fixtures rather than downloading anything. Real

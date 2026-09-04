@@ -1,3 +1,14 @@
+# Allow tests to run directly from package environment using TestEnv
+# (which should be installed in the base Julia environment)
+if !isempty(PROGRAM_FILE)
+    try
+        import TestEnv
+        TestEnv.activate()
+    catch ArgumentError
+        println("No TestEnv package found, environment may be incomplete")
+    end
+end
+
 using Test
 using Fabio
 using Fabio: Header, getheader, getci, Magic, matches, register!, formats, formatnames
