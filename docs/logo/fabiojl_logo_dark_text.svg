@@ -3,7 +3,7 @@
    viewBox="0 0 600 600"
    version="1.1"
    id="svg75"
-   sodipodi:docname="fabiojl_logo_dark.svg"
+   sodipodi:docname="fabiojl_logo_dark_text.svg"
    inkscape:export-filename="fabio-dark.png"
    inkscape:export-xdpi="96"
    inkscape:export-ydpi="96"
@@ -22,12 +22,12 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.0332524"
-     inkscape:cx="284.53841"
-     inkscape:cy="245.8257"
+     inkscape:cx="276.79587"
+     inkscape:cy="296.15223"
      inkscape:window-width="1505"
      inkscape:window-height="919"
-     inkscape:window-x="212"
-     inkscape:window-y="1233"
+     inkscape:window-x="7"
+     inkscape:window-y="35"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg75" />
   <defs
@@ -648,4 +648,20 @@
        fill="#9558B2"
        id="circle75" />
   </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer1"
+     inkscape:label="Text" />
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;fill:#000000"
+     x="126.72656"
+     y="137.9375"
+     id="text1"
+     inkscape:transform-center-y="-11.613813"><tspan
+       sodipodi:role="line"
+       id="tspan1"
+       x="126.72656"
+       y="137.9375"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff">Fabio.jl</tspan></text>
 </svg>

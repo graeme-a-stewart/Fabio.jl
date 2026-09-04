@@ -3,10 +3,7 @@
    viewBox="0 0 600 600"
    version="1.1"
    id="svg75"
-   sodipodi:docname="fabiojl_logo_dark.svg"
-   inkscape:export-filename="fabio-dark.png"
-   inkscape:export-xdpi="96"
-   inkscape:export-ydpi="96"
+   sodipodi:docname="fabiojl_logo_light_text.svg"
    inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -21,54 +18,54 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.0332524"
-     inkscape:cx="284.53841"
-     inkscape:cy="245.8257"
-     inkscape:window-width="1505"
-     inkscape:window-height="919"
-     inkscape:window-x="212"
-     inkscape:window-y="1233"
+     inkscape:zoom="0.68832705"
+     inkscape:cx="253.51321"
+     inkscape:cy="242.61723"
+     inkscape:window-width="1462"
+     inkscape:window-height="761"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg75" />
   <defs
      id="defs7">
     <radialGradient
-       id="bgDark"
+       id="bgLight"
        cx="50%"
        cy="50%"
        r="75%">
       <stop
          offset="0%"
-         stop-color="#1f2333"
+         stop-color="#ffffff"
          id="stop1" />
       <stop
          offset="100%"
-         stop-color="#12141d"
+         stop-color="#f2f3f8"
          id="stop2" />
     </radialGradient>
     <radialGradient
-       id="beamGlowDark"
+       id="beamGlowLight"
        cx="50%"
        cy="50%"
        r="50%">
       <stop
          offset="0%"
-         stop-color="#ffffff"
-         stop-opacity="0.12"
+         stop-color="#2a2f4a"
+         stop-opacity="0.06"
          id="stop3" />
       <stop
          offset="60%"
-         stop-color="#ffffff"
-         stop-opacity="0.02"
+         stop-color="#2a2f4a"
+         stop-opacity="0.015"
          id="stop4" />
       <stop
          offset="100%"
-         stop-color="#ffffff"
+         stop-color="#2a2f4a"
          stop-opacity="0"
          id="stop5" />
     </radialGradient>
     <filter
-       id="softDark"
+       id="softLight"
        x="-50%"
        y="-50%"
        width="200%"
@@ -78,7 +75,7 @@
          id="feGaussianBlur5" />
     </filter>
     <filter
-       id="ringHaloDark"
+       id="ringHaloLight"
        x="-0.33"
        y="-0.33"
        width="1.66"
@@ -88,7 +85,7 @@
          id="feGaussianBlur6" />
     </filter>
     <filter
-       id="ringHaloDarkSoft"
+       id="ringHaloLightSoft"
        x="-0.72"
        y="-0.72"
        width="2.44"
@@ -105,16 +102,16 @@
      width="560"
      height="560"
      rx="64"
-     fill="url(#bgDark)"
-     stroke="#3a3f57"
+     fill="url(#bgLight)"
+     stroke="#d7d9e6"
      stroke-width="2"
      id="rect7" />
   <!-- faint pixel grid, lower-left quadrant, representing raster / 2D image data -->
   <g
-     opacity="0.35"
+     opacity="0.55"
      id="g28">
     <clipPath
-       id="quadDark">
+       id="quadLight">
       <rect
          x="52"
          y="352"
@@ -124,10 +121,10 @@
          id="rect8" />
     </clipPath>
     <g
-       clip-path="url(#quadDark)"
+       clip-path="url(#quadLight)"
        id="g27">
       <g
-         stroke="#4a5072"
+         stroke="#c7cade"
          stroke-width="1"
          id="g25">
         <line
@@ -244,24 +241,24 @@
          y="352"
          width="31"
          height="31"
-         fill="#8b93c4"
-         opacity="0.5"
+         fill="#aab0d4"
+         opacity="0.55"
          id="rect25" />
       <rect
          x="269"
          y="383"
          width="31"
          height="31"
-         fill="#8b93c4"
-         opacity="0.35"
+         fill="#aab0d4"
+         opacity="0.4"
          id="rect26" />
       <rect
          x="207"
          y="352"
          width="31"
          height="31"
-         fill="#8b93c4"
-         opacity="0.3"
+         fill="#aab0d4"
+         opacity="0.35"
          id="rect27" />
     </g>
   </g>
@@ -270,7 +267,7 @@
      cx="300"
      cy="300"
      r="230"
-     fill="url(#beamGlowDark)"
+     fill="url(#beamGlowLight)"
      id="circle28" />
   <!-- diffraction rings: halo + core per ring, varied intensity like real Bragg peak strengths -->
   <!-- ring 1: r=68, strong -->
@@ -279,17 +276,17 @@
      cy="300"
      r="68"
      fill="none"
-     stroke="#aeb6ec"
+     stroke="#565d84"
      stroke-width="12"
-     opacity="0.30"
-     filter="url(#ringHaloDark)"
+     opacity="0.16"
+     filter="url(#ringHaloLight)"
      id="circle29" />
   <circle
      cx="300"
      cy="300"
      r="68"
      fill="none"
-     stroke="#d8dbf7"
+     stroke="#454b70"
      stroke-width="2.6"
      opacity="0.85"
      id="circle30" />
@@ -299,17 +296,17 @@
      cy="300"
      r="115"
      fill="none"
-     stroke="#8f97cf"
+     stroke="#7a81ab"
      stroke-width="8"
-     opacity="0.16"
-     filter="url(#ringHaloDarkSoft)"
+     opacity="0.09"
+     filter="url(#ringHaloLightSoft)"
      id="circle31" />
   <circle
      cx="300"
      cy="300"
      r="115"
      fill="none"
-     stroke="#b4baE4"
+     stroke="#7a81ab"
      stroke-width="1.6"
      opacity="0.45"
      id="circle32" />
@@ -319,19 +316,19 @@
      cy="300"
      r="167"
      fill="none"
-     stroke="#9ba3d8"
+     stroke="#6b7299"
      stroke-width="10"
-     opacity="0.24"
-     filter="url(#ringHaloDark)"
+     opacity="0.13"
+     filter="url(#ringHaloLight)"
      id="circle33" />
   <circle
      cx="300"
      cy="300"
      r="167"
      fill="none"
-     stroke="#c6cbf0"
+     stroke="#5e6590"
      stroke-width="2.1"
-     opacity="0.65"
+     opacity="0.62"
      id="circle34" />
   <!-- ring 4: r=224, faint outer, ~80% of center-edge distance -->
   <circle
@@ -339,107 +336,107 @@
      cy="300"
      r="224"
      fill="none"
-     stroke="#7d84b8"
+     stroke="#9aa1c4"
      stroke-width="6"
-     opacity="0.10"
-     filter="url(#ringHaloDarkSoft)"
+     opacity="0.08"
+     filter="url(#ringHaloLightSoft)"
      id="circle35" />
   <circle
      cx="300"
      cy="300"
      r="224"
      fill="none"
-     stroke="#9aa1cf"
+     stroke="#9aa1c4"
      stroke-width="1.2"
-     opacity="0.30"
+     opacity="0.35"
      id="circle36" />
   <!-- fine detector speckle/noise across rings for realism -->
   <g
-     fill="#c7ccec"
+     fill="#5e6590"
      id="g50">
     <circle
        cx="256"
        cy="245"
        r="1"
-       opacity="0.5"
+       opacity="0.35"
        id="circle37" />
     <circle
        cx="349"
        cy="252"
        r="1"
-       opacity="0.4"
+       opacity="0.3"
        id="circle38" />
     <circle
        cx="238"
        cy="300"
        r="1"
-       opacity="0.45"
+       opacity="0.32"
        id="circle39" />
     <circle
        cx="365"
        cy="303"
        r="1"
-       opacity="0.4"
+       opacity="0.3"
        id="circle40" />
     <circle
        cx="272"
        cy="360"
        r="1"
-       opacity="0.4"
+       opacity="0.3"
        id="circle41" />
     <circle
        cx="332"
        cy="358"
        r="1"
-       opacity="0.45"
+       opacity="0.32"
        id="circle42" />
     <circle
        cx="204"
        cy="272"
        r="1"
-       opacity="0.35"
+       opacity="0.25"
        id="circle43" />
     <circle
        cx="398"
        cy="284"
        r="1"
-       opacity="0.35"
+       opacity="0.25"
        id="circle44" />
     <circle
        cx="216"
        cy="366"
        r="1"
-       opacity="0.3"
+       opacity="0.22"
        id="circle45" />
     <circle
        cx="382"
        cy="372"
        r="1"
-       opacity="0.35"
+       opacity="0.25"
        id="circle46" />
     <circle
        cx="180"
        cy="230"
        r="1"
-       opacity="0.3"
+       opacity="0.22"
        id="circle47" />
     <circle
        cx="422"
        cy="240"
        r="1"
-       opacity="0.3"
+       opacity="0.22"
        id="circle48" />
     <circle
        cx="150"
        cy="330"
        r="1"
-       opacity="0.25"
+       opacity="0.18"
        id="circle49" />
     <circle
        cx="450"
        cy="320"
        r="1"
-       opacity="0.3"
+       opacity="0.2"
        id="circle50" />
   </g>
   <!-- crosshair beam center -->
@@ -448,7 +445,7 @@
      y1="250"
      x2="300"
      y2="270"
-     stroke="#6a7099"
+     stroke="#7a81ab"
      stroke-width="1.5"
      id="line50" />
   <line
@@ -456,7 +453,7 @@
      y1="330"
      x2="300"
      y2="350"
-     stroke="#6a7099"
+     stroke="#7a81ab"
      stroke-width="1.5"
      id="line51" />
   <line
@@ -464,7 +461,7 @@
      y1="300"
      x2="270"
      y2="300"
-     stroke="#6a7099"
+     stroke="#7a81ab"
      stroke-width="1.5"
      id="line52" />
   <line
@@ -472,22 +469,22 @@
      y1="300"
      x2="350"
      y2="300"
-     stroke="#6a7099"
+     stroke="#7a81ab"
      stroke-width="1.5"
      id="line53" />
   <circle
      cx="300"
      cy="300"
      r="5"
-     fill="#ffffff"
-     opacity="0.4"
-     filter="url(#ringHaloDarkSoft)"
+     fill="#2a2f4a"
+     opacity="0.25"
+     filter="url(#ringHaloLightSoft)"
      id="circle53" />
   <circle
      cx="300"
      cy="300"
      r="4.5"
-     fill="#f4f5fc"
+     fill="#2a2f4a"
      id="circle54" />
   <!-- scattered Bragg peaks (neutral), pulled outward to sit near the new ring positions -->
   <g
@@ -496,110 +493,110 @@
        cx="300"
        cy="76"
        r="10"
-       fill="#c7ccec"
-       opacity="0.35"
-       filter="url(#ringHaloDarkSoft)"
+       fill="#565d84"
+       opacity="0.20"
+       filter="url(#ringHaloLightSoft)"
        id="circle55" />
     <circle
        cx="300"
        cy="76"
        r="6"
-       fill="#dcdff9"
+       fill="#454b70"
        opacity="0.9"
        id="circle56" />
     <circle
        cx="300"
        cy="524"
        r="10"
-       fill="#c7ccec"
-       opacity="0.35"
-       filter="url(#ringHaloDarkSoft)"
+       fill="#565d84"
+       opacity="0.20"
+       filter="url(#ringHaloLightSoft)"
        id="circle57" />
     <circle
        cx="300"
        cy="524"
        r="6"
-       fill="#dcdff9"
+       fill="#454b70"
        opacity="0.9"
        id="circle58" />
     <circle
        cx="76"
        cy="300"
        r="10"
-       fill="#c7ccec"
-       opacity="0.35"
-       filter="url(#ringHaloDarkSoft)"
+       fill="#565d84"
+       opacity="0.20"
+       filter="url(#ringHaloLightSoft)"
        id="circle59" />
     <circle
        cx="76"
        cy="300"
        r="6"
-       fill="#dcdff9"
+       fill="#454b70"
        opacity="0.9"
        id="circle60" />
     <circle
        cx="524"
        cy="300"
        r="10"
-       fill="#c7ccec"
-       opacity="0.35"
-       filter="url(#ringHaloDarkSoft)"
+       fill="#565d84"
+       opacity="0.20"
+       filter="url(#ringHaloLightSoft)"
        id="circle61" />
     <circle
        cx="524"
        cy="300"
        r="6"
-       fill="#dcdff9"
+       fill="#454b70"
        opacity="0.9"
        id="circle62" />
     <circle
        cx="205"
        cy="137"
        r="4.5"
-       fill="#9aa1cf"
+       fill="#7a81ab"
        opacity="0.75"
        id="circle63" />
     <circle
        cx="395"
        cy="137"
        r="4.5"
-       fill="#9aa1cf"
+       fill="#7a81ab"
        opacity="0.75"
        id="circle64" />
     <circle
        cx="205"
        cy="463"
        r="4.5"
-       fill="#9aa1cf"
+       fill="#7a81ab"
        opacity="0.75"
        id="circle65" />
     <circle
        cx="395"
        cy="463"
        r="4.5"
-       fill="#9aa1cf"
+       fill="#7a81ab"
        opacity="0.75"
        id="circle66" />
     <circle
        cx="130"
        cy="200"
        r="3.5"
-       fill="#7d84b3"
-       opacity="0.6"
+       fill="#9aa1c4"
+       opacity="0.7"
        id="circle67" />
     <circle
        cx="470"
        cy="400"
        r="3.5"
-       fill="#7d84b3"
-       opacity="0.6"
+       fill="#9aa1c4"
+       opacity="0.7"
        id="circle68" />
     <circle
        cx="130"
        cy="400"
        r="3.5"
-       fill="#7d84b3"
-       opacity="0.6"
+       fill="#9aa1c4"
+       opacity="0.7"
        id="circle69" />
   </g>
   <!-- the three Julia-brand peaks, nested naturally into the pattern, with matching halo -->
@@ -610,8 +607,8 @@
        cy="200"
        r="20"
        fill="#CB3C33"
-       opacity="0.30"
-       filter="url(#ringHaloDark)"
+       opacity="0.22"
+       filter="url(#ringHaloLight)"
        id="circle70" />
     <circle
        cx="470"
@@ -624,8 +621,8 @@
        cy="248"
        r="20"
        fill="#389826"
-       opacity="0.30"
-       filter="url(#ringHaloDark)"
+       opacity="0.22"
+       filter="url(#ringHaloLight)"
        id="circle72" />
     <circle
        cx="422"
@@ -638,8 +635,8 @@
        cy="173"
        r="20"
        fill="#9558B2"
-       opacity="0.30"
-       filter="url(#ringHaloDark)"
+       opacity="0.22"
+       filter="url(#ringHaloLight)"
        id="circle74" />
     <circle
        cx="368"
@@ -648,4 +645,14 @@
        fill="#9558B2"
        id="circle75" />
   </g>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:96px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;fill:#000000"
+     x="126.72656"
+     y="138.9375"
+     id="text75"><tspan
+       sodipodi:role="line"
+       id="tspan75"
+       x="126.72656"
+       y="138.9375">Fabio.jl</tspan></text>
 </svg>
