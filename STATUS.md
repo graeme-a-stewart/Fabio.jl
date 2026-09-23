@@ -134,11 +134,13 @@ of the fixtures.
 
 Carried forward, and still true:
 
-- **No `*_master.h5` file was available.** The Eiger reader is validated against a data file
-  with `/entry/data/data` directly. A master file reaches its data through external links and
-  virtual datasets, and while HDF5 resolves both transparently — so the reader needs no code for
-  it — that has not been *demonstrated* here. FabIO's archive has `sample_water0000.h5`, used by
-  its own tutorial, which would settle it.
+- **No complete `*_master.h5` file was available.** A master file reaches its data through
+  external links and virtual datasets. External links are now covered by a fixture master file
+  in `test_hdf5.jl`, and a master copied without its data files fails naming the link and the
+  missing file (checked against the DLS `Therm_6_2.nxs` and SwissFEL Jungfrau masters in the
+  NeXus example data, whose data files are not distributed). Virtual datasets are still
+  undemonstrated. FabIO's archive has `sample_water0000.h5`, used by its own tutorial, which
+  would settle it.
 - **No real LImA, Lambda or sparse file** was available either; all three are validated against
   fixtures only, though sparse is checked against FabIO's own densify output.
 - **The noisy sparse path is untestable against FabIO.** `densify(...; noisy = true)` redraws

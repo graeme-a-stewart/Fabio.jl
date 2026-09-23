@@ -2,7 +2,7 @@
     FabioHDF5Ext
 
 The HDF5 family of detector formats: Eiger, LImA, Lambda, `sparsify-Bragg`, and a generic
-reader for any HDF5 file holding a 2-D or 3-D numeric dataset.
+reader for any HDF5 file holding a numeric dataset of two or more dimensions.
 
 Loaded automatically when the user runs `using HDF5`. See `Fabio.NexusLike` for why this lives
 in an extension rather than the core, and for the axis-order argument that makes an HDF5

@@ -16,11 +16,90 @@ function _attrstring(obj, name::AbstractString)
     return nothing
 end
 
+"""`H5L_info2_t`, which HDF5.jl does not wrap: its `h5l_get_info` binds the v1 call, gone from HDF5 2."""
+struct _H5LInfo2
+    type::Cint
+    corder_valid::Bool
+    corder::Int64
+    cset::Cint
+    u::NTuple{2,UInt64}  # union { H5O_token_t token; size_t val_size }
+end
+
+# The C value. `HDF5.API.H5L_TYPE_EXTERNAL` is 2, which is not what libhdf5 reports.
+const _H5L_TYPE_EXTERNAL = Cint(64)
+
+"""
+The `(file, path)` an external link `name` in `node` points at, or `nothing` if it is not one.
+
+Introspection only, done after an open has already failed, so any trouble here yields
+`nothing` and the caller falls back to the original error.
+"""
+function _externallink(node, name::AbstractString)
+    try
+        info = Ref{_H5LInfo2}()
+        ccall(
+            (:H5Lget_info2, HDF5.API.libhdf5), Cint, (HDF5.API.hid_t, Cstring, Ptr{_H5LInfo2}, HDF5.API.hid_t),
+            node, name, info, HDF5.API.H5P_DEFAULT,
+        ) < 0 && return nothing
+        info[].type == _H5L_TYPE_EXTERNAL || return nothing
+        n = info[].u[1]
+        buf = Vector{UInt8}(undef, n)
+        ccall(
+            (:H5Lget_val, HDF5.API.libhdf5), Cint, (HDF5.API.hid_t, Cstring, Ptr{UInt8}, Csize_t, HDF5.API.hid_t),
+            node, name, buf, n, HDF5.API.H5P_DEFAULT,
+        ) < 0 && return nothing
+        flags = Ref{Cuint}()
+        fileptr = Ref{Ptr{UInt8}}()
+        objptr = Ref{Ptr{UInt8}}()
+        GC.@preserve buf begin
+            ccall(
+                (:H5Lunpack_elink_val, HDF5.API.libhdf5), Cint,
+                (Ptr{UInt8}, Csize_t, Ref{Cuint}, Ref{Ptr{UInt8}}, Ref{Ptr{UInt8}}),
+                buf, n, flags, fileptr, objptr,
+            ) < 0 && return nothing
+            return unsafe_string(fileptr[]), unsafe_string(objptr[])
+        end
+    catch
+        return nothing
+    end
+end
+
+"""
+Open child `name` of `node`, explaining a dangling external link rather than failing inside it.
+
+A NeXus master file — Eiger and Jungfrau both write them — keeps its pixels in separate data
+files reached by external links. Copied without those files, it opens fine and then fails deep
+inside libhdf5 with "can't open file", naming neither the link nor the file it wanted. This
+names both.
+"""
+function _child(node, name::AbstractString)
+    try
+        return node[name]
+    catch err
+        target = _externallink(node, name)
+        target === nothing && rethrow()
+        tfile, tpath = target
+        here = HDF5.filename(node)
+        link = rstrip(HDF5.name(node), '/') * "/" * name
+        candidate = isabspath(tfile) ? tfile : joinpath(dirname(here), tfile)
+        why = isfile(candidate) ?
+            "which could not be opened: " * first(split(sprint(showerror, err), '\n')) :
+            "which is not present next to it; a NeXus master file needs its data files alongside"
+        throw(
+            CorruptFileError(
+                "HDF5: \"$link\" in $here is an external link to \"$tpath\" in " *
+                "\"$tfile\", $why",
+            ),
+        )
+    end
+end
+
 """
 Whether `path` resolves inside `h`.
 
 Walked one component at a time rather than handed to `haskey` whole, because a missing
-intermediate group is an ordinary outcome here, not an error worth an exception.
+intermediate group is an ordinary outcome here, not an error worth an exception. A link that
+exists but cannot be followed is not missing, and [`_child`](@ref) raises for it.
 """
 function _exists(h, path::AbstractString)
     node = h
@@ -28,7 +107,7 @@ function _exists(h, path::AbstractString)
         isempty(part) && continue
         (node isa HDF5.File || node isa HDF5.Group) || return false
         haskey(node, String(part)) || return false
-        node = node[String(part)]
+        node = _child(node, String(part))
     end
     return true
 end
@@ -57,7 +136,14 @@ end
 _isimageeltype(::Type{T}) where {T<:Union{Integer,AbstractFloat}} = true
 _isimageeltype(::Type) = false
 
-"""Whether `ds` has the shape and type of an image or an image stack."""
+"""
+Whether `ds` has the shape and type of an image or an image stack.
+
+Anything of two or more dimensions qualifies. The first two (in HDF5.jl's reversed order) are
+the frame; every further dimension indexes frames, so a 2-D scan of detector images — stored
+`(scan_slow, scan_fast, slow, fast)` in C order, as NeXus scan files commonly do — is a stack of
+`scan_slow * scan_fast` frames.
+"""
 function _isimagedataset(ds)
     ds isa HDF5.Dataset || return false
     T = try
@@ -71,7 +157,7 @@ function _isimagedataset(ds)
     catch
         return false
     end
-    return n == 2 || n == 3
+    return n >= 2
 end
 
 """Every image-shaped dataset in the file, as `path => dataset`, depth first and name sorted."""
@@ -79,9 +165,13 @@ function _imagedatasets(h, prefix::AbstractString = "", found = Pair{String,Any}
     node = prefix == "" ? h : h[prefix]
     for name in sort(collect(keys(node)))
         path = prefix * "/" * name
+        # An external link that cannot be followed may well be the image, so it is reported
+        # rather than skipped: guessing among what remains could pick the wrong dataset, and
+        # `::` bypasses the walk. Anything else unopenable is skipped as before.
         child = try
-            node[name]
-        catch
+            _child(node, name)
+        catch err
+            err isa CorruptFileError && rethrow()
             continue
         end
         if child isa HDF5.Group
@@ -102,9 +192,10 @@ This is the [`Fabio.refine`](@ref) hook doing what FabIO does inside `_do_magic`
 magic table holds the composite string `"eiger/lima/sparse/hdf5/lambda"` and a branch picks
 one apart. The order of the tests is FabIO's, so the same file resolves the same way.
 
-Declining (returning `nothing`) is possible here in a way it is not in FabIO: an in-memory
-buffer has no path for the HDF5 library to open, and a file that cannot be opened at all is
-better handed back to detection than claimed and then failed on.
+Declining (returning `nothing`) is possible here in a way it is not in FabIO: a file that
+the HDF5 library cannot open at all is better handed back to detection than claimed and then
+failed on. A file that *opens* is HDF5, though, so a failure while classifying it propagates;
+declining then would report that no format matched, which the magic number says is untrue.
 """
 function Fabio.refine(
     ::NexusLike{:unknown},
@@ -119,12 +210,15 @@ function Fabio.refine(
     (path === nothing || file === nothing) && return NexusLike{:unknown}()
     # An explicit `file.h5::/group/dataset` says the user has already chosen the dataset.
     sourcefragment(src) === nothing || return NexusLike{:hdf5}()
-    return try
-        HDF5.h5open(file, "r") do h
-            _classify(h)
-        end
+    h = try
+        HDF5.h5open(file, "r")
     catch
-        nothing
+        return nothing
+    end
+    try
+        return _classify(h)
+    finally
+        close(h)
     end
 end
 
@@ -173,10 +267,10 @@ function _eigerdatasets(h)
     entry = _lookup(h, "/entry")
     entry isa HDF5.Group || return out
     if haskey(entry, "data")
-        node = entry["data"]
+        node = _child(entry, "data")
         if node isa HDF5.Group
             for name in sort(filter(startswith("data"), collect(keys(node))))
-                child = node[name]
+                child = _child(node, name)
                 _isimagedataset(child) && push!(out, "/entry/data/" * name => child)
             end
         elseif _isimagedataset(node)
@@ -184,7 +278,7 @@ function _eigerdatasets(h)
         end
     else
         for name in sort(filter(startswith("data"), collect(keys(entry))))
-            child = entry[name]
+            child = _child(entry, name)
             _isimagedataset(child) && push!(out, "/entry/" * name => child)
         end
     end
@@ -214,15 +308,17 @@ function _genericdataset(h, fragment::Union{Nothing,String}, file::AbstractStrin
             signal = _attrstring(node, "signal")
             for name in (signal, "data")
                 name === nothing && continue
-                if haskey(node, name) && _isimagedataset(node[name])
-                    return rstrip(fragment, '/') * "/" * name => node[name]
+                haskey(node, name) || continue
+                child = _child(node, name)
+                if _isimagedataset(child)
+                    return rstrip(fragment, '/') * "/" * name => child
                 end
             end
             throw(CorruptFileError("HDF5: \"$fragment\" in $file is a group, not a dataset"))
         end
         _isimagedataset(node) || throw(
             CorruptFileError(
-                "HDF5: \"$fragment\" in $file is not a 2-D or 3-D numeric dataset",
+                "HDF5: \"$fragment\" in $file is not a numeric dataset of two or more dimensions",
             ),
         )
         return String(fragment) => node
@@ -234,7 +330,7 @@ function _genericdataset(h, fragment::Union{Nothing,String}, file::AbstractStrin
     candidates = _imagedatasets(h)
     length(candidates) == 1 && return candidates[1]
     isempty(candidates) &&
-        throw(CorruptFileError("HDF5: $file holds no 2-D or 3-D numeric dataset"))
+        throw(CorruptFileError("HDF5: $file holds no numeric dataset of two or more dimensions"))
     throw(
         CorruptFileError(
             "HDF5: $file holds " *
@@ -259,7 +355,7 @@ function _nexusdefault(h)
     signal = _attrstring(grp, "signal")
     signal === nothing && return nothing
     haskey(grp, signal) || return nothing
-    ds = grp[signal]
+    ds = _child(grp, signal)
     _isimagedataset(ds) || return nothing
     return (rstrip(HDF5.name(grp), '/') * "/" * signal) => ds
 end

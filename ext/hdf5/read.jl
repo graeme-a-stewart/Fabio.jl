@@ -109,6 +109,10 @@ HDF5.jl reports a dataset's dimensions in the reverse of the file's C order, so 
 as `(nframes, slow, fast)` arrives here as `(fast, slow, nframes)` — already this package's
 axis convention, with the frame index last. A 2-D dataset is a single frame and is marked with
 `index = -1`.
+
+With more than three dimensions every trailing one indexes frames, and they are numbered
+column-major over those trailing dimensions. That is the file's C order read back to front, so
+frame `k` here is `k` in h5py's `data.reshape(-1, slow, fast)` too.
 """
 function _specs(datasets, file::AbstractString, base::Header)
     specs = FrameSpec[]
@@ -121,7 +125,7 @@ function _specs(datasets, file::AbstractString, base::Header)
         if length(sz) == 2
             push!(specs, FrameSpec(h, HDF5Slice{T}(String(path), -1, (sz[1], sz[2]))))
         else
-            for k = 1:sz[3]
+            for k = 1:prod(sz[3:end])
                 push!(specs, FrameSpec(h, HDF5Slice{T}(String(path), k - 1, (sz[1], sz[2]))))
             end
         end
@@ -182,12 +186,18 @@ end
 function _readframedata(st::HDF5State, sl::HDF5Slice{T}) where {T}
     ds = st.datasets[sl.dataset]
     raw = try
-        sl.index < 0 ? ds[:, :] : ds[:, :, sl.index+1]
+        if sl.index < 0
+            ds[:, :]
+        else
+            # The linear frame index, spread over however many trailing dimensions there are.
+            at = CartesianIndices(size(ds)[3:end])[sl.index+1]
+            ds[:, :, Tuple(at)...]
+        end
     catch err
         throw(_readerror(err, ds, sl))
     end
-    # A scalar index usually drops the trailing dimension, but not in every HDF5.jl version.
-    A = ndims(raw) == 3 ? reshape(raw, size(raw, 1), size(raw, 2)) : raw
+    # Scalar indices usually drop the trailing dimensions, but not in every HDF5.jl version.
+    A = ndims(raw) == 2 ? raw : reshape(raw, size(raw, 1), size(raw, 2))
     return A::Matrix{T}
 end
 

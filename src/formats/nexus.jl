@@ -44,8 +44,9 @@ Where one frame lives inside an HDF5 container: which dataset, and which slice o
 
 This is to the HDF5 readers what [`BinaryLayout`](@ref) is to a tier-1 format — the difference
 being that it addresses a dataset rather than a byte range, which is precisely why this family
-needs tier 2. `index` is the 0-based frame index within a 3-D dataset, or `-1` when the
-dataset is 2-D and *is* the frame.
+needs tier 2. `index` is the 0-based frame index within a dataset of three or more
+dimensions — linear over all the dimensions after the frame's two — or `-1` when the dataset is
+2-D and *is* the frame.
 """
 struct HDF5Slice{T}
     dataset::String

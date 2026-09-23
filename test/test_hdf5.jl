@@ -282,6 +282,110 @@ end
         end
     end
 
+    @testset "datasets of more than three dimensions" begin
+        # A 3 x 2 scan of 7 x 5 images: C order (2, 3, 5, 7), which HDF5.jl reports reversed.
+        # Frames are numbered column-major over the trailing (3, 2), which is h5py's
+        # `data.reshape(-1, 5, 7)` order, so frame k is the pattern written with k.
+        nx, ny = 7, 5
+        A = reshape(_h5stack(Int32, nx, ny, 6), nx, ny, 3, 2)
+        p = _write_flat(joinpath(H5DIR, "scan4d.h5"), "scan", A)
+        for spec in (p, p * "::/scan")
+            Fabio.openimage(spec) do f
+                @test f.format == Fabio.NexusLike{:hdf5}()
+                @test length(f) == 6
+                @test pixeltype(f) == Int32
+                for k = 1:6
+                    @test size(f[k]) == (nx, ny)
+                    @test collect(f[k]) == _h5pattern(Int32, nx, ny, k)
+                end
+                # Frame 4 is scan point (1, 2): the second row of the slow scan axis.
+                @test collect(f[4]) == A[:, :, 1, 2]
+            end
+        end
+
+        # Five dimensions work the same way.
+        B = reshape(_h5stack(UInt16, 4, 3, 8), 4, 3, 2, 2, 2)
+        p5 = _write_flat(joinpath(H5DIR, "scan5d.h5"), "scan", B)
+        Fabio.openimage(p5) do f
+            @test length(f) == 8
+            @test all(collect(f[k]) == _h5pattern(UInt16, 4, 3, k) for k = 1:8)
+        end
+
+        # A 4-D image no longer hides behind a lone 2-D bookkeeping table: with both
+        # present the file is ambiguous, rather than the table being read as the image.
+        p6 = joinpath(H5DIR, "scan4d_table.h5")
+        h5open(p6, "w") do h
+            h["measurement/image"] = A
+            h["measurement/timestamp"] = rand(5, 25)
+        end
+        err = try
+            Fabio.openimage(p6)
+            nothing
+        catch e
+            e
+        end
+        @test err isa Fabio.CorruptFileError
+        @test occursin("/measurement/image", sprint(showerror, err))
+    end
+
+    @testset "external links" begin
+        # A NeXus master file whose frames live in a separate data file.
+        dir = mktempdir(H5DIR)
+        data = _write_eiger(joinpath(dir, "run_data_000001.h5"), [3], 6, 4)
+        master = joinpath(dir, "run_master.h5")
+        h5open(master, "w") do h
+            g = create_group(create_group(h, "entry"), "data")
+            HDF5.API.h5l_create_external(
+                "run_data_000001.h5", "/entry/data/data_000001", g, "data_000001",
+                HDF5.API.H5P_DEFAULT, HDF5.API.H5P_DEFAULT,
+            )
+        end
+        Fabio.openimage(master) do f
+            @test f.format == Fabio.NexusLike{:eiger}()
+            @test length(f) == 3
+            @test collect(f[2]) == _h5pattern(UInt32, 6, 4, 2)
+        end
+
+        # The same master without its data file: an error naming the link and the missing
+        # file, not "no registered format matched" from detection giving up.
+        rm(data)
+        for spec in (master, master * "::/entry/data/data_000001")
+            err = try
+                Fabio.openimage(spec)
+                nothing
+            catch e
+                e
+            end
+            @test err isa Fabio.CorruptFileError
+            msg = sprint(showerror, err)
+            @test occursin("/entry/data/data_000001", msg)
+            @test occursin("run_data_000001.h5", msg)
+            @test occursin("external link", msg)
+        end
+
+        # In a generic file the dangling link is reported rather than skipped, since
+        # skipping it would leave the one remaining dataset to be read as the image.
+        generic = joinpath(dir, "generic.h5")
+        h5open(generic, "w") do h
+            h["scan/table"] = rand(4, 4)
+            HDF5.API.h5l_create_external(
+                "missing.h5", "/image", h, "image", HDF5.API.H5P_DEFAULT, HDF5.API.H5P_DEFAULT,
+            )
+        end
+        err = try
+            Fabio.openimage(generic)
+            nothing
+        catch e
+            e
+        end
+        @test err isa Fabio.CorruptFileError
+        @test occursin("missing.h5", sprint(showerror, err))
+        # Naming a dataset that is present still works.
+        Fabio.openimage(generic * "::/scan/table") do f
+            @test size(f[1]) == (4, 4)
+        end
+    end
+
     @testset "sparse (sparsify-Bragg)" begin
         p = _write_sparse(joinpath(H5DIR, "sparse.h5"))
         # Produced by FabIO reading this same file, transposed into (fast, slow) order.
