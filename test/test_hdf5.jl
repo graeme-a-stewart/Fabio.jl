@@ -282,6 +282,69 @@ end
         end
     end
 
+    @testset "the older NeXus signal=1 attribute" begin
+        # The detector's dataset, hard-linked into an NXdata group and marked signal=1 there,
+        # beside an unmarked 2-D table: the marked one is the image, reported by its NXdata path.
+        img = _h5pattern(Int32, 9, 6)
+        p = joinpath(H5DIR, "nexus_signal.h5")
+        h5open(p, "w") do h
+            e = create_group(h, "entry")
+            det = create_group(create_group(e, "instrument"), "detector")
+            det["data"] = img
+            attrs(det["data"])["signal"] = Int32(1)
+            nxdata = create_group(e, "data")
+            attrs(nxdata)["NX_class"] = "NXdata"
+            HDF5.API.h5l_create_hard(
+                det, "data", nxdata, "counts", HDF5.API.H5P_DEFAULT, HDF5.API.H5P_DEFAULT,
+            )
+            e["table"] = rand(5, 5)
+        end
+        Fabio.openimage(p) do f
+            @test f.format == Fabio.NexusLike{:hdf5}()
+            @test header(f[1])["HDF5Path"] == "/entry/data/counts"
+            @test collect(f[1]) == img
+        end
+
+        # A string "1" counts too; a secondary signal=2 does not compete with it.
+        p2 = joinpath(H5DIR, "nexus_signal_string.h5")
+        h5open(p2, "w") do h
+            h["a"] = _h5pattern(Float32, 4, 4)
+            attrs(h["a"])["signal"] = "2"
+            h["b"] = _h5pattern(Float32, 5, 3)
+            attrs(h["b"])["signal"] = "1"
+        end
+        Fabio.openimage(p2) do f
+            @test header(f[1])["HDF5Path"] == "/b"
+        end
+
+        # Two distinct datasets both marked signal=1 — one per bank — stay ambiguous.
+        p3 = joinpath(H5DIR, "nexus_signal_two.h5")
+        h5open(p3, "w") do h
+            for bank in ("bank1", "bank2")
+                h["$bank/counts"] = _h5pattern(Int32, 6, 6)
+                attrs(h["$bank/counts"])["signal"] = Int32(1)
+            end
+        end
+        err = try
+            Fabio.openimage(p3)
+            nothing
+        catch e
+            e
+        end
+        @test err isa Fabio.CorruptFileError
+        @test occursin("/bank1/counts", sprint(showerror, err))
+        @test occursin("/bank2/counts", sprint(showerror, err))
+
+        # The `default` chain still outranks it.
+        p4 = _write_nexus_default(joinpath(H5DIR, "nexus_default_and_signal.h5"), 10, 8)
+        h5open(p4, "r+") do h
+            attrs(h["other/decoy"])["signal"] = Int32(1)
+        end
+        Fabio.openimage(p4) do f
+            @test header(f[1])["HDF5Path"] == "/entry/measured/counts"
+        end
+    end
+
     @testset "datasets of more than three dimensions" begin
         # A 3 x 2 scan of 7 x 5 images: C order (2, 3, 5, 7), which HDF5.jl reports reversed.
         # Frames are numbered column-major over the trailing (3, 2), which is h5py's

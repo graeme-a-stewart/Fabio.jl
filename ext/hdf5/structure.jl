@@ -291,11 +291,13 @@ The dataset a generic HDF5 file means, resolved in decreasing order of authority
 1. the `::` fragment the caller supplied — always wins;
 2. the NeXus `default` attribute chain, root → entry → `NXdata`, which is what the standard
    says a file should use to nominate its plottable data;
-3. the file's only image-shaped dataset, if it has exactly one.
+3. the older NeXus convention of a `signal=1` attribute on the dataset itself, if exactly one
+   image-shaped dataset carries it (see [`_signaldataset`](@ref));
+4. the file's only image-shaped dataset, if it has exactly one.
 
 FabIO implements only the first of these and makes it mandatory, raising "the '::' separator
-is mandatory for HDF5 container" otherwise. Two and three cost little and mean that a file
-which is unambiguous does not need to be told what it obviously contains. When the file *is*
+is mandatory for HDF5 container" otherwise. The rest cost little and mean that a file which
+is unambiguous does not need to be told what it obviously contains. When the file *is*
 ambiguous the error names every candidate, so the fragment to add is there to copy.
 """
 function _genericdataset(h, fragment::Union{Nothing,String}, file::AbstractString)
@@ -328,6 +330,8 @@ function _genericdataset(h, fragment::Union{Nothing,String}, file::AbstractStrin
     d === nothing || return d
 
     candidates = _imagedatasets(h)
+    s = _signaldataset(h, candidates)
+    s === nothing || return s
     length(candidates) == 1 && return candidates[1]
     isempty(candidates) &&
         throw(CorruptFileError("HDF5: $file holds no numeric dataset of two or more dimensions"))
@@ -358,4 +362,58 @@ function _nexusdefault(h)
     ds = _child(grp, signal)
     _isimagedataset(ds) || return nothing
     return (rstrip(HDF5.name(grp), '/') * "/" * signal) => ds
+end
+
+"""Whether `ds` carries the pre-2014 NeXus marker of an NXdata group's plottable data, `signal=1`."""
+function _issignalone(ds)
+    haskey(HDF5.attrs(ds), "signal") || return false
+    v = try
+        HDF5.read_attribute(ds, "signal")
+    catch
+        return false
+    end
+    v isa AbstractArray && length(v) == 1 && (v = first(v))
+    v isa Integer && return v == 1
+    v isa AbstractString && return strip(v) == "1"
+    return false
+end
+
+"""
+What makes two paths the same dataset: the file and the object's address in it.
+
+A NeXus NXdata group usually hard-links the detector's dataset rather than copying it, so the
+same `signal=1` dataset turns up under both `/entry/instrument/det/data` and `/entry/data/data`.
+`nothing` if it cannot be worked out, in which case no two paths are treated as one.
+"""
+function _objectid(ds)
+    info = try
+        HDF5.API.h5o_get_info(ds)
+    catch
+        return nothing
+    end
+    # `token` from HDF5 1.12 on, a plain address before that.
+    return (info.fileno, hasproperty(info, :token) ? info.token : info.addr)
+end
+
+"""
+The candidate a file nominates with the older NeXus convention, or `nothing`.
+
+Before the `default` and group-level `signal` attributes (NIF 2014), an NXdata group marked
+its plottable dataset with an integer attribute `signal=1` on the dataset; secondary signals
+were 2, 3, …. Files from that era are still common. This counts only when a single dataset is
+so marked, since a multi-bank or multi-image file marks one per NXdata group and choosing
+among those is the caller's call. Where a hard link reaches the same dataset twice, the path
+inside the NXdata group is reported, being the one the marker belongs to.
+"""
+function _signaldataset(h, candidates)
+    marked = filter(c -> _issignalone(last(c)), candidates)
+    isempty(marked) && return nothing
+    ids = map(c -> something(_objectid(last(c)), first(c)), marked)
+    length(unique(ids)) == 1 || return nothing
+    for c in marked
+        parent = _lookup(h, dirname(first(c)))
+        parent === nothing && continue
+        _attrstring(parent, "NX_class") == "NXdata" && return c
+    end
+    return first(marked)
 end
