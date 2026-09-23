@@ -106,6 +106,44 @@ function _write_nexus_default(path, nx, ny)
     return path
 end
 
+"""
+A NeXus file with the metadata an application definition asks for, in deliberately mixed units:
+the pixel size in micrometres on one axis and millimetres on the other, the beam centre in
+pixels on one axis and millimetres on the other, and the wavelength only as a photon energy.
+`count_time` differs per frame. The image is the detector's dataset, hard-linked into NXdata.
+"""
+function _write_nexus_metadata(path; nframes = 3)
+    h5open(path, "w") do h
+        nxclass(g, c) = (attrs(g)["NX_class"] = c; g)
+        withunits(g, name, v, u) = (g[name] = v; attrs(g[name])["units"] = u)
+        e = nxclass(create_group(h, "entry"), "NXentry")
+        e["title"] = "metadata fixture"
+        e["start_time"] = "2024-03-07T21:49:06.1234+01:00"
+        inst = nxclass(create_group(e, "instrument"), "NXinstrument")
+        det = nxclass(create_group(inst, "detector"), "NXdetector")
+        det["data"] = _h5stack(Int32, 8, 6, nframes)
+        withunits(det, "distance", 150.0, "mm")
+        withunits(det, "x_pixel_size", 75.0, "um")
+        withunits(det, "y_pixel_size", 0.075, "mm")
+        withunits(det, "beam_center_x", 3.5, "pixels")
+        withunits(det, "beam_center_y", 0.1875, "mm")          # 2.5 pixels of 75 µm
+        withunits(det, "count_time", [0.1, 0.2, 0.3][1:nframes], "s")
+        det["sensor_material"] = "Si"
+        det["pixel_mask"] = zeros(Int32, 8, 6)                  # data, not metadata
+        mono = nxclass(create_group(inst, "monochromator"), "NXmonochromator")
+        withunits(mono, "energy", 12.398419843320026, "keV")   # 1 Å
+        coll = nxclass(create_group(inst, "epics"), "NXcollection")
+        coll["some_pv"] = 42.0
+        nxclass(create_group(e, "sample"), "NXsample")["name"] = "lysozyme"
+        nxdata = nxclass(create_group(e, "data"), "NXdata")
+        attrs(nxdata)["signal"] = "data"
+        HDF5.API.h5l_create_hard(
+            det, "data", nxdata, "data", HDF5.API.H5P_DEFAULT, HDF5.API.H5P_DEFAULT,
+        )
+    end
+    return path
+end
+
 """The sparse fixture, in the layout FabIO's `SparseImage` expects."""
 function _write_sparse(path)
     # (fast, slow) here; FabIO sees the transpose of this, which is what the reference below
@@ -345,6 +383,89 @@ end
         end
     end
 
+    @testset "NeXus metadata" begin
+        p = _write_nexus_metadata(joinpath(H5DIR, "nexus_metadata.h5"))
+        Fabio.openimage(p) do f
+            @test length(f) == 3
+            h = header(f[1])
+            # The raw layer: fields by path, units as `@units`, exactly as the file has them.
+            @test h["/entry/title"] == "metadata fixture"
+            @test h["/entry/instrument/detector/distance"] == 150.0
+            @test h["/entry/instrument/detector/distance@units"] == "mm"
+            @test h["/entry/instrument/detector/sensor_material"] == "Si"
+            @test h["/entry/instrument/monochromator/energy@units"] == "keV"
+            @test h["/entry/sample/name"] == "lysozyme"
+            @test h["/entry/instrument/detector@NX_class"] == "NXdetector"
+            @test h["HDF5Detector"] == "/entry/instrument/detector"
+            # Arrays that are data, and groups that are not experiment metadata, stay out.
+            @test !haskey(h, "/entry/instrument/detector/pixel_mask")
+            @test !haskey(h, "/entry/instrument/epics/some_pv")
+            @test !any(startswith("/entry/data/"), keys(h))
+            # One value per frame, each frame holding its own.
+            @test [header(f[k])["/entry/instrument/detector/count_time"] for k = 1:3] ==
+                  [0.1, 0.2, 0.3]
+
+            # The normalised layer, from those same keys.
+            m = Fabio.normalise(f[2])
+            @test m.exposure_time == 0.2
+            @test m.wavelength ≈ 1e-10
+            @test m.detector_distance ≈ 0.15
+            @test all(m.pixel_size .≈ (75e-6, 75e-6))
+            @test all(m.beam_center .≈ (3.5, 2.5))
+            @test m.timestamp == DateTime(2024, 3, 7, 21, 49, 6, 123)
+        end
+
+        # A field with no units attribute is not guessed at, and a wavelength beats an energy.
+        h5open(p, "r+") do h
+            HDF5.delete_attribute(h["entry/instrument/detector/distance"], "units")
+            mono = h["entry/instrument/monochromator"]
+            mono["wavelength"] = 0.5
+            attrs(mono["wavelength"])["units"] = "Angstrom"
+        end
+        Fabio.openimage(p) do f
+            m = Fabio.normalise(f[1])
+            @test m.detector_distance === nothing
+            @test haskey(header(f[1]), "/entry/instrument/detector/distance")
+            @test m.wavelength ≈ 0.5e-10
+        end
+
+        # Energy units are case-sensitive where it matters: meV is not MeV.
+        @test Fabio._NX_ENERGY["meV"] == 1e-3 && Fabio._NX_ENERGY["MeV"] == 1e6
+
+        # A single frame has no per-frame arrays: a one-element count_time is simply a value.
+        p1 = _write_nexus_metadata(joinpath(H5DIR, "nexus_metadata_1.h5"); nframes = 1)
+        Fabio.openimage(p1) do f
+            @test header(f[1])["/entry/instrument/detector/count_time"] == 0.1
+            @test Fabio.normalise(f[1]).exposure_time == 0.1
+        end
+
+        # Two detectors, and the image not linked from either: which one is not guessed.
+        p2 = joinpath(H5DIR, "nexus_two_detectors.h5")
+        h5open(p2, "w") do h
+            e = create_group(h, "entry")
+            attrs(e)["NX_class"] = "NXentry"
+            for name in ("det1", "det2")
+                d = create_group(e, name)
+                attrs(d)["NX_class"] = "NXdetector"
+                d["distance"] = 100.0
+                attrs(d["distance"])["units"] = "mm"
+            end
+            e["image"] = _h5pattern(Float32, 4, 4)
+        end
+        Fabio.openimage(p2) do f
+            @test !haskey(header(f[1]), "HDF5Detector")
+            @test Fabio.normalise(f[1]).detector_distance === nothing
+            @test header(f[1])["/entry/det2/distance"] == 100.0
+        end
+
+        # A file that is not NeXus gets only the reader's own keys.
+        pf = _write_flat(joinpath(H5DIR, "flat_nometa.h5"), "data", _h5pattern(Float32, 4, 4))
+        Fabio.openimage(pf) do f
+            @test sort(collect(keys(header(f[1])))) == ["HDF5File", "HDF5Path"]
+            @test Fabio.normalise(f[1]) == Fabio.ImageMetadata()
+        end
+    end
+
     @testset "datasets of more than three dimensions" begin
         # A 3 x 2 scan of 7 x 5 images: C order (2, 3, 5, 7), which HDF5.jl reports reversed.
         # Frames are numbered column-major over the trailing (3, 2), which is h5py's
@@ -407,6 +528,11 @@ end
             @test f.format == Fabio.NexusLike{:eiger}()
             @test length(f) == 3
             @test collect(f[2]) == _h5pattern(UInt32, 6, 4, 2)
+        end
+        # Reading through the link must not leave the data file held open: HDF5 would then
+        # refuse to open it directly, until the garbage collector happened to run.
+        Fabio.openimage(data) do f
+            @test length(f) == 3
         end
 
         # The same master without its data file: an error naming the link and the missing

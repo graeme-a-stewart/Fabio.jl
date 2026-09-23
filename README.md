@@ -140,7 +140,9 @@ records millimetres, Bruker centimetres, KCD micrometres, and wavelengths are al
 Ångström. Metres throughout is pyFAI's convention, and pyFAI is what most often consumes this
 data. The raw `Header` is untouched and remains the source of truth.
 
-Implemented for Esperanto, MarCCD, Pilatus, CBF, d\*TREK/ADSC, Bruker and KCD. Any other
+Implemented for Esperanto, MarCCD, Pilatus, CBF, d\*TREK/ADSC, Bruker, KCD and NeXus HDF5.
+NeXus states a unit for each field, and a field that does not is left as `nothing` rather than
+assumed to be in the usual one. Any other
 format returns an all-`nothing` result rather than an error, and adding one is a single method:
 
 ```julia
@@ -169,9 +171,22 @@ UnsupportedFormatError: file "scan.h5" is HDF5; run `using HDF5` to enable this 
 ```
 
 The `::` separator is optional here, where FabIO requires it. A file that names its data
-through the NeXus `default`/`signal` attributes, or that contains exactly one image dataset,
-is read without being told where to look; when the choice is genuinely ambiguous the error
-lists every candidate.
+through the NeXus `default`/`signal` attributes — or the older `signal=1` on the dataset — or
+that contains exactly one image dataset, is read without being told where to look; when the
+choice is genuinely ambiguous the error lists every candidate. A dataset of more than three
+dimensions, such as a 2-D scan of detector images, is a stack whose frames run over all the
+trailing dimensions.
+
+A NeXus file's experiment metadata is in the header, keyed by HDF5 path with attributes as
+`path@attr`, so `hdr["/entry/instrument/detector/distance"]` and
+`hdr["/entry/instrument/detector/distance@units"]` are what the file says. The fields of the
+metadata groups (NXdetector, NXbeam, NXmonochromator, NXsource, NXsample and the like) are
+there, but not bulk data or NXcollection groups. A field with one value per frame, such as
+`count_time` in a scan, gives each frame its own value. `Fabio.normalise` reads the usual six
+quantities from these fields, converting units as it goes.
+
+A NeXus master file whose data files are missing fails with an error naming the external link
+and the file it needs.
 
 Real detector files are usually written with a plugin compression filter. Those need the
 matching Julia package — `import H5Zbitshuffle` for Eiger's bitshuffle-LZ4 — and until it is

@@ -262,6 +262,164 @@ end
 normalise(::SPE, h::Header) =
     ImageMetadata(exposure_time = _firstnumber(getci(h, "exposure_time")))
 
+# ------------------------------------------------------------------------------ NeXus
+
+"""
+Metres per unit, for the length units NeXus files write. Looked up lower-cased, since writers
+disagree about capitals and nothing here is ambiguous once they are gone.
+"""
+const _NX_LENGTH = Dict(
+    (u => 1.0 for u in ("m", "metre", "metres", "meter", "meters"))...,
+    (u => 1e-2 for u in ("cm", "centimetre", "centimetres", "centimeter", "centimeters"))...,
+    (u => 1e-3 for u in ("mm", "millimetre", "millimetres", "millimeter", "millimeters"))...,
+    (u => 1e-6 for u in ("um", "µm", "μm", "micron", "microns", "micrometre", "micrometres",
+        "micrometer", "micrometers"))...,
+    (u => 1e-9 for u in ("nm", "nanometre", "nanometres", "nanometer", "nanometers"))...,
+    (u => 1e-10 for u in ("a", "å", "Å", "ang", "angstrom", "angstroms", "ångström"))...,
+    (u => 1e-12 for u in ("pm", "picometre", "picometres", "picometer", "picometers"))...,
+)
+
+"""Electronvolts per unit. Case matters here and only here: `meV` and `MeV` differ by 10⁹."""
+const _NX_ENERGY = Dict(
+    "eV" => 1.0, "ev" => 1.0, "keV" => 1e3, "KeV" => 1e3, "kev" => 1e3,
+    "meV" => 1e-3, "MeV" => 1e6, "GeV" => 1e9,
+)
+
+"""Seconds per unit."""
+const _NX_TIME = Dict(
+    (u => 1.0 for u in ("s", "sec", "secs", "second", "seconds"))...,
+    (u => 1e-3 for u in ("ms", "millisecond", "milliseconds"))...,
+    (u => 1e-6 for u in ("us", "µs", "μs", "microsecond", "microseconds"))...,
+    (u => 1e-9 for u in ("ns", "nanosecond", "nanoseconds"))...,
+)
+
+const _NX_PIXELS = Set(("pixel", "pixels", "px"))
+
+"""`h c` in eV·m, to turn a photon energy into a wavelength."""
+const _HC_EV_M = 1.239841984332e-6
+
+"""A header value as a single number, or `nothing` — a string holding one number counts."""
+_nxnumber(v) = v isa Real ? Float64(v) : v isa AbstractString ? _firstnumber(v) : nothing
+
+"""The `units` attribute of `path` as the file spells it, stripped, or `nothing`."""
+function _nxunits(h::Header, path)
+    u = get(h, path * "@units", nothing)
+    u isa AbstractString || return nothing
+    u = strip(u)
+    return isempty(u) ? nothing : String(u)
+end
+
+"""
+`path`'s value in SI via `table`, or `nothing` when either the value or a unit the table knows
+is missing. A field with no `units` attribute is not assumed to be in any particular unit:
+real files omit it on fields where the conventional unit differs between facilities.
+"""
+function _nxquantity(h::Header, path, table::Dict; lowercase_units = true)
+    x = _nxnumber(get(h, path, nothing))
+    x === nothing && return nothing
+    u = _nxunits(h, path)
+    u === nothing && return nothing
+    scale = get(table, lowercase_units ? lowercase(u) : u, nothing)
+    scale === nothing && return nothing
+    return x * scale
+end
+
+"""The groups of NeXus class `class`, in file order, from the `@NX_class` keys of the header."""
+function _nxgroups(h::Header, class::AbstractString)
+    out = String[]
+    for (k, v) in h
+        endswith(k, "@NX_class") && v == class && push!(out, k[1:end-length("@NX_class")])
+    end
+    return out
+end
+
+"""The first of `fields` found in any group of `class`, through `f(path)`, that is not `nothing`."""
+function _nxfirst(f, h::Header, class, fields)
+    for field in fields, g in _nxgroups(h, class)
+        haskey(h, g * "/" * field) || continue
+        v = f(g * "/" * field)
+        v === nothing || return v
+    end
+    return nothing
+end
+
+"""
+NeXus names its fields and their units explicitly, so this is mostly finding the right group.
+
+- **Detector** fields come from the NXdetector the image belongs to (`HDF5Detector`, which the
+  HDF5 reader records only when it can tell). `count_time` is the exposure; it may differ per
+  frame, and each frame's header holds its own.
+- **Wavelength** is the NXbeam `incident_wavelength`, then the NXmonochromator `wavelength`,
+  then either's photon energy converted.
+- **Beam centre** is converted to pixels. NeXus records it as a length, which is divided by
+  the pixel size; a `pixel` unit is taken as it stands.
+- **Axes.** `x` is taken as the fast axis and `y` the slow, as Dectris and DIALS write and read
+  them.
+- **Timestamp** is the NXentry `start_time`, an ISO 8601 string. The wall-clock time is kept and
+  any UTC offset dropped, as for every other format here, whose headers carry no zone at all.
+
+A field without a `units` attribute gives `nothing`: the files to hand include a beam centre
+that is millimetres in one and evidently pixels in another, neither saying so. Detector
+geometry recorded only as an NXtransformations chain — as modern NXmx files do — is not
+evaluated; its raw values are in the header.
+"""
+function normalise(::NexusLike, h::Header)
+    det = get(h, "HDF5Detector", nothing)
+    field(name) = det === nothing ? "" : det * "/" * name
+    length_of(p) = _nxquantity(h, p, _NX_LENGTH)
+    energy_to_wavelength(p) = begin
+        e = _nxquantity(h, p, _NX_ENERGY; lowercase_units = false)
+        e === nothing || e <= 0 ? nothing : _HC_EV_M / e
+    end
+
+    wavelength = something(
+        _nxfirst(length_of, h, "NXbeam", ("incident_wavelength",)),
+        _nxfirst(length_of, h, "NXmonochromator", ("wavelength",)),
+        _nxfirst(energy_to_wavelength, h, "NXbeam", ("incident_energy",)),
+        _nxfirst(energy_to_wavelength, h, "NXmonochromator", ("energy",)),
+        Some(nothing),
+    )
+
+    px = length_of(field("x_pixel_size"))
+    py = length_of(field("y_pixel_size"))
+    beam_center = _pair(_nxbeamcenter(h, field("beam_center_x"), px),
+                        _nxbeamcenter(h, field("beam_center_y"), py))
+
+    entry = _nxgroups(h, "NXentry")
+    start = isempty(entry) ? nothing : get(h, entry[1] * "/start_time", nothing)
+
+    return ImageMetadata(
+        exposure_time = _nxquantity(h, field("count_time"), _NX_TIME),
+        wavelength = wavelength,
+        detector_distance = length_of(field("distance")),
+        beam_center = beam_center,
+        pixel_size = _pair(px, py),
+        timestamp = _nxdate(start),
+    )
+end
+
+"""One beam-centre coordinate in pixels, from a length and that axis's pixel size."""
+function _nxbeamcenter(h::Header, path, pixelsize)
+    x = _nxnumber(get(h, path, nothing))
+    x === nothing && return nothing
+    u = _nxunits(h, path)
+    u === nothing && return nothing
+    lowercase(u) in _NX_PIXELS && return x
+    scale = get(_NX_LENGTH, lowercase(u), nothing)
+    (scale === nothing || pixelsize === nothing || pixelsize == 0) && return nothing
+    return x * scale / pixelsize
+end
+
+"""An ISO 8601 NeXus time, to millisecond precision and without its UTC offset."""
+function _nxdate(v)
+    v isa AbstractString || return nothing
+    m = match(r"^\s*(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(\.\d+)?", v)
+    m === nothing && return nothing
+    frac = m[3] === nothing ? "" : rpad(m[3][1:min(end, 4)], 4, '0')
+    return tryparse(DateTime, m[1] * "T" * m[2] * frac,
+        isempty(frac) ? dateformat"y-m-dTH:M:S" : dateformat"y-m-dTH:M:S.s")
+end
+
 # -------------------------------------------------------------------------- timestamps
 
 """

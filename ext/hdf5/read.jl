@@ -39,8 +39,25 @@ function _scanfile(fmt::NexusLike, src::AbstractSource)
         ),
     )
     return HDF5.h5open(file, "r") do h
-        _scan(fmt, h, src, file)
+        _closingopened() do
+            fileheader, specs = _scan(fmt, h, src, file)
+            return fileheader, _withmetadata(h, fileheader, specs)
+        end
     end
+end
+
+"""Add the NeXus metadata of the entry holding the image. See `ext/hdf5/nexus.jl`."""
+function _withmetadata(h, fileheader::Header, specs::Vector{FrameSpec})
+    isempty(specs) && return specs
+    l = first(specs).layout
+    l isa HDF5Slice || return specs
+    image = try
+        _open(h, l.dataset)
+    catch
+        return specs
+    end
+    md = _nexusmetadata(h, l.dataset, image, length(specs))
+    return _applymetadata!(fileheader, specs, md)
 end
 
 # One method per flavour rather than a single `scan(::NexusLike{F}) where {F}`, which would
@@ -158,7 +175,12 @@ function Fabio.openstate(
     return HDF5State(h, datasets)
 end
 
-Fabio.closestate(::NexusLike, state::HDF5State) = close(state.file)
+# The datasets first: one reached through an external link lives in another file, which closing
+# this one would leave open. See `_open`.
+function Fabio.closestate(::NexusLike, state::HDF5State)
+    foreach(close, values(state.datasets))
+    close(state.file)
+end
 Fabio.closestate(::NexusLike, ::Nothing) = nothing
 
 # ------------------------------------------------------------------------------- read
@@ -231,4 +253,4 @@ function _readerror(err, ds, sl::HDF5Slice)
 end
 
 """Bookkeeping this reader adds, true of one container only. See [`Fabio.layoutkeys`](@ref)."""
-Fabio.layoutkeys(::NexusLike) = ("HDF5File", "HDF5Path")
+Fabio.layoutkeys(::NexusLike) = ("HDF5File", "HDF5Path", "HDF5Detector")

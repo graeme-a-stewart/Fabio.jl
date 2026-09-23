@@ -37,6 +37,7 @@ using Fabio:
 
 include("hdf5/structure.jl")
 include("hdf5/read.jl")
+include("hdf5/nexus.jl")
 include("hdf5/sparse.jl")
 
 end # module

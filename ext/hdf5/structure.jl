@@ -16,6 +16,44 @@ function _attrstring(obj, name::AbstractString)
     return nothing
 end
 
+# ------------------------------------------------------------------ closing what is opened
+
+"""
+Every HDF5 object this package opens goes through here, so it can be closed deterministically.
+
+HDF5.jl closes objects in finalizers, and closing a file does not close objects that live in
+*another* file. An object reached through an external link lives in the linked file, which
+libhdf5 opens with its own default "weak" close degree and keeps open until that object is
+closed. Left to the garbage collector, the linked file therefore stays open for an arbitrary
+time, and any `h5open` of it in the meantime — including by this package, opening that data
+file directly — fails with "file close degree doesn't match".
+"""
+function _open(parent, name::AbstractString)
+    obj = parent[name]
+    opened = get(task_local_storage(), :fabio_hdf5_opened, nothing)
+    opened === nothing || push!(opened, obj)
+    return obj
+end
+
+"""Run `f()`, then close every object it opened through [`_open`](@ref)."""
+function _closingopened(f)
+    opened = Any[]
+    return task_local_storage(:fabio_hdf5_opened, opened) do
+        try
+            f()
+        finally
+            for obj in Iterators.reverse(opened)
+                try
+                    close(obj)
+                catch
+                end
+            end
+        end
+    end
+end
+
+# ------------------------------------------------------------------ external links
+
 """`H5L_info2_t`, which HDF5.jl does not wrap: its `h5l_get_info` binds the v1 call, gone from HDF5 2."""
 struct _H5LInfo2
     type::Cint
@@ -74,7 +112,7 @@ names both.
 """
 function _child(node, name::AbstractString)
     try
-        return node[name]
+        return _open(node, name)
     catch err
         target = _externallink(node, name)
         target === nothing && rethrow()
@@ -115,7 +153,7 @@ end
 """Resolve `path` inside `h`, or `nothing` if any component is missing."""
 function _lookup(h, path::AbstractString)
     _exists(h, path) || return nothing
-    return h[String(path)]
+    return _open(h, String(path))
 end
 
 """Read a scalar string dataset, tolerating both fixed- and variable-length storage."""
@@ -162,7 +200,7 @@ end
 
 """Every image-shaped dataset in the file, as `path => dataset`, depth first and name sorted."""
 function _imagedatasets(h, prefix::AbstractString = "", found = Pair{String,Any}[])
-    node = prefix == "" ? h : h[prefix]
+    node = prefix == "" ? h : _open(h, prefix)
     for name in sort(collect(keys(node)))
         path = prefix * "/" * name
         # An external link that cannot be followed may well be the image, so it is reported
@@ -216,7 +254,7 @@ function Fabio.refine(
         return nothing
     end
     try
-        return _classify(h)
+        return _closingopened(() -> _classify(h))
     finally
         close(h)
     end
