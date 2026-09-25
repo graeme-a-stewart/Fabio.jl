@@ -119,37 +119,98 @@ function splitfragment(path::AbstractString)
 end
 
 """
+    compressioncodec(::Val{suffix}) -> Union{Nothing,Tuple{Type,Type}}
+
+The `(Decompressor, Compressor)` pair of TranscodingStreams codecs for a whole-file
+compression suffix, as a `Symbol` without the dot (`Val(:bz2)`), or `nothing` if the codec is
+not available.
+
+gzip is built in. bzip2, xz and zstd arrive with extensions that add a method here when the
+user loads CodecBzip2, CodecXz or CodecZstd, so the core carries none of those binary
+dependencies.
+"""
+compressioncodec(::Val) = nothing
+compressioncodec(::Val{:gz}) = (GzipDecompressor, GzipCompressor)
+
+"""The codec package that provides each optional compression suffix."""
+const COMPRESSION_PACKAGES = Dict(".bz2" => "CodecBzip2", ".xz" => "CodecXz", ".zst" => "CodecZstd")
+
+function _compressioncodec(suffix::AbstractString)
+    codec = compressioncodec(Val(Symbol(lstrip(suffix, '.'))))
+    codec === nothing || return codec
+    pkg = get(COMPRESSION_PACKAGES, suffix, nothing)
+    pkg === nothing && throw(ArgumentError("unknown compression suffix $(repr(suffix))"))
+    throw(
+        UnsupportedFormatError(
+            "$(lstrip(suffix, '.'))-compressed files need $pkg; run `using $pkg`",
+        ),
+    )
+end
+
+"""
     decompress(suffix, raw) -> Vector{UInt8}
 
-Decompress a whole file held in `raw`. `.gz` is supported by the core; the remaining
-algorithms arrive with their optional packages.
+Decompress a whole file held in `raw`. `suffix` is one of `COMPRESSION_SUFFIXES`, or
+`""` for no compression. `.gz` is supported by the core; the remaining algorithms arrive with
+their optional packages, see [`compressioncodec`](@ref).
 """
 function decompress(suffix::AbstractString, raw::Vector{UInt8})
-    if suffix == ".gz"
-        return transcode(GzipDecompressor, raw)
-    elseif suffix == ".bz2"
-        throw(
-            UnsupportedFormatError(
-                "bzip2-compressed files need CodecBzip2; run `using CodecBzip2` " *
-                "(support arrives with the Fabio bzip2 extension)",
-            ),
-        )
-    elseif suffix == ".xz"
-        throw(UnsupportedFormatError("xz-compressed files need CodecXz; run `using CodecXz`"))
-    elseif suffix == ".zst"
-        throw(
-            UnsupportedFormatError(
-                "zstd-compressed files need CodecZstd; run `using CodecZstd`",
-            ),
-        )
+    isempty(suffix) && return raw
+    D, _ = _compressioncodec(suffix)
+    return transcode(D, raw)
+end
+
+"""
+    compress(suffix, raw) -> Vector{UInt8}
+
+The inverse of [`decompress`](@ref), used by `writeimage` for a compressed destination.
+"""
+function compress(suffix::AbstractString, raw::Vector{UInt8})
+    isempty(suffix) && return raw
+    _, C = _compressioncodec(suffix)
+    return transcode(C, raw)
+end
+
+"""
+    sniffcompression(head) -> String
+
+The compression suffix implied by a file's first bytes, or `""`.
+
+Extensions lie: FabIO's own test archive serves a bzip2 file as `100nmfilmonglass_1_1.img`.
+These signatures are what the compressors themselves write, so a match is decisive:
+
+| | signature |
+|---|---|
+| gzip  | `1f 8b 08` (deflate is the only method in use) |
+| bzip2 | `BZh`, a block size digit `1`–`9`, then the block magic `1AY&SY` or, for an empty stream, the end-of-stream magic |
+| xz    | `fd 37 7a 58 5a 00` |
+| zstd  | `28 b5 2f fd` |
+
+bzip2 is checked to ten bytes rather than three because `BZh` alone is printable ASCII that
+a text header could plausibly begin with.
+"""
+function sniffcompression(head::AbstractVector{UInt8})
+    n = length(head)
+    n >= 3 && head[1] == 0x1f && head[2] == 0x8b && head[3] == 0x08 && return ".gz"
+    if n >= 10 && head[1] == UInt8('B') && head[2] == UInt8('Z') && head[3] == UInt8('h') &&
+       UInt8('1') <= head[4] <= UInt8('9')
+        block = @view head[5:10]
+        (block == b"1AY&SY" || block == UInt8[0x17, 0x72, 0x45, 0x38, 0x50, 0x90]) &&
+            return ".bz2"
     end
-    return raw
+    n >= 6 && @view(head[1:6]) == UInt8[0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00] && return ".xz"
+    n >= 4 && @view(head[1:4]) == UInt8[0x28, 0xb5, 0x2f, 0xfd] && return ".zst"
+    return ""
 end
 
 """
     opensource(path; mmap=true) -> AbstractSource
 
-Open `path`, transparently decompressing a recognised compression suffix.
+Open `path`, transparently decompressing a compressed file.
+
+Compression is recognised by suffix (`.gz`, `.bz2`, `.xz`, `.zst`) and, failing that, by the
+file's leading bytes (see [`sniffcompression`](@ref)), so a compressed file under a misleading
+name still opens. FabIO relies on the suffix alone.
 
 An uncompressed file becomes an [`MmapSource`](@ref) (zero-copy, thread-safe); a compressed
 one is decompressed once into a [`BufferSource`](@ref). This is where FabIO's
@@ -160,16 +221,16 @@ function opensource(path::AbstractString; mmap::Bool = true)
     file, fragment = splitfragment(path)
     isfile(file) || throw(ArgumentError("no such file: $file"))
     _, sfx = stripcompression(file)
-    if isempty(sfx)
-        if mmap
-            io = Base.open(file, "r")
-            buf = Mmap.mmap(io, Vector{UInt8}, filesize(io))
-            return MmapSource(buf, file, io, fragment)
-        else
-            return BufferSource(Base.read(file), file, fragment)
-        end
+    isempty(sfx) || return BufferSource(decompress(sfx, Base.read(file)), file, fragment)
+    head = Base.open(io -> Base.read(io, 10), file, "r")
+    sfx = sniffcompression(head)
+    isempty(sfx) || return BufferSource(decompress(sfx, Base.read(file)), file, fragment)
+    if mmap
+        io = Base.open(file, "r")
+        buf = Mmap.mmap(io, Vector{UInt8}, filesize(io))
+        return MmapSource(buf, file, io, fragment)
     end
-    return BufferSource(decompress(sfx, Base.read(file)), file, fragment)
+    return BufferSource(Base.read(file), file, fragment)
 end
 
 """

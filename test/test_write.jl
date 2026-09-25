@@ -135,9 +135,20 @@ _wpattern(::Type{T}, nx, ny, k = 0) where {T} =
         # Really gzip, not a plain file wearing the suffix.
         @test read(p)[1:2] == UInt8[0x1f, 0x8b]
         @test collect(Fabio.readimage(p)) == A
-        # The formats the reader cannot decompress unaided are refused rather than mis-written.
-        @test_throws Fabio.UnsupportedFormatError writeimage(joinpath(WDIR, "x.edf.bz2"), A)
-        @test_throws Fabio.UnsupportedFormatError writeimage(joinpath(WDIR, "x.edf.xz"), A)
+        # The formats the reader cannot decompress unaided are refused rather than mis-written,
+        # naming the package that would fix it. This relies on running before
+        # test_compression.jl, which loads those packages.
+        if Fabio.compressioncodec(Val(:bz2)) === nothing
+            err = try
+                writeimage(joinpath(WDIR, "x.edf.bz2"), A)
+            catch e
+                e
+            end
+            @test err isa Fabio.UnsupportedFormatError
+            @test occursin("using CodecBzip2", sprint(showerror, err))
+            @test !isfile(joinpath(WDIR, "x.edf.bz2"))
+            @test_throws Fabio.UnsupportedFormatError writeimage(joinpath(WDIR, "x.edf.xz"), A)
+        end
     end
 
     @testset "formats that cannot write say so" begin

@@ -153,6 +153,15 @@ Fabio.normalise(::MyDetector, h::Fabio.Header) =
 FabIO has no equivalent — it deliberately leaves header semantics alone, and so does this
 package by default; nothing above is consulted unless you ask for it.
 
+SPEC writes motor positions, counters and the sample's orientation into EDF headers as pairs of
+parallel lists (`motor_mne`/`motor_pos` and so on). `Fabio.edfmnemonics` pairs them up, and
+`Fabio.edfsample` returns the unit cell and UB matrix, both as silx reads them:
+
+```julia
+Fabio.edfmnemonics(hdr, "motor")    # OrderedDict("samy" => "1.5", "samz" => "-0.25", …)
+Fabio.edfsample(hdr).ub_matrix      # 3×3, or `edfsample` is `nothing` if absent
+```
+
 ## HDF5
 
 The HDF5 readers arrive with the library:
@@ -197,6 +206,46 @@ needs the second extension tier: it reads its own pixels rather than describing 
 `BinaryLayout`. It maps onto the axis order here exactly, though — HDF5 stores C-order, and
 HDF5.jl reverses the dimensions when mapping into a column-major language, so a stack stored
 as `(nframes, slow, fast)` arrives as `(fast, slow, nframes)` with no permutation at all.
+
+## Compressed files
+
+A whole file compressed with gzip opens as if it were not compressed. bzip2, xz and zstd work
+the same once their codec package is loaded:
+
+```julia
+using CodecBzip2                      # or CodecXz, CodecZstd
+frame = Fabio.readimage("image.edf.bz2")
+Fabio.writeimage("out.cbf.bz2", frame)  # writing compresses, so reading it back works too
+```
+
+Without the package, opening such a file fails naming the package to load. Compression is
+recognised by the file's first bytes as well as its suffix, so a compressed file with a
+misleading name still opens. FabIO relies on the suffix alone.
+
+## Data URLs
+
+silx points at data inside files with URLs, and they work here too. `getdata` is
+`silx.io.get_data`, and `DataUrl` parses the same strings into the same parts:
+
+```julia
+getdata("fabio:///data/series.edf?slice=2")                  # the third frame's pixels
+getdata("/data/scan.h5::/entry/data/data")                   # a whole dataset (`using HDF5`)
+getdata("silx:/data/scan.h5?path=/entry/data/data&slice=0")  # its first frame
+
+u = DataUrl("fabio:///data/series.edf?slice=2")
+frame = Fabio.readimage(u)                                   # the same frame, with its header
+```
+
+**A URL's slice is 0-based and in numpy axis order**, as silx writes it, so a URL means the same
+thing whichever tool reads it. `slice=0` is the first frame, and on an `(nframes, slow, fast)`
+stack, `slice=2,1` is row 2 of frame 3. `Fabio.juliaindices` converts a slice to Julia indices.
+The results come back in this package's `(fast, slow, …)` order, the reverse of the numpy
+shape silx reports.
+
+A `silx:` data path into an HDF5 file works now. A data path into an *image* file (silx's
+NeXus view, `/scan_0/instrument/detector_0/data`) does not yet; use a `fabio:` URL for those.
+See [docs/silx-io-roadmap.md](docs/silx-io-roadmap.md) for how this package is catching up with
+the rest of `silx.io`.
 
 ## Writing files
 
@@ -360,6 +409,7 @@ Zenodo [10.5281/zenodo.2546760](https://doi.org/10.5281/zenodo.2546760).
 | [docs/validation.md](docs/validation.md) | what each reader has been checked against, and how |
 | [docs/performance.md](docs/performance.md) | measured against FabIO on the same files |
 | [docs/fabio-py-defects.md](docs/fabio-py-defects.md) | defects found in FabIO along the way |
+| [docs/silx-io-roadmap.md](docs/silx-io-roadmap.md) | what `silx.io` offers, what is here, and the plan for the rest |
 | [DESIGN.md](DESIGN.md) | architecture, and the reasoning behind it |
 | [STATUS.md](STATUS.md) | where the work stands, and what is next |
 

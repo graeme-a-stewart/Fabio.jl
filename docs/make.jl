@@ -31,18 +31,18 @@ the repository become links into it.
 """
 function stage(src::AbstractString, dest::AbstractString)
     text = read(src, String)
-    for page in ("validation", "performance", "fabio-py-defects")
+    for page in ("validation", "performance", "fabio-py-defects", "silx-io-roadmap")
         text = replace(text, "](docs/$page.md)" => "]($page.md)")
     end
     for file in ("DESIGN.md", "STATUS.md", "LICENSE", "README.md")
-        text = replace(text, "]($file)" => "]($BLOB$file)")
+        text = replace(text, "]($file)" => "]($BLOB$file)", "](../$file)" => "]($BLOB$file)")
     end
     write(joinpath(@__DIR__, "src", dest), text)
     return dest
 end
 
 stage(joinpath(@__DIR__, "..", "README.md"), "index.md")
-for page in ("validation.md", "performance.md", "fabio-py-defects.md")
+for page in ("validation.md", "performance.md", "fabio-py-defects.md", "silx-io-roadmap.md")
     stage(joinpath(@__DIR__, page), page)
 end
 
@@ -74,6 +74,7 @@ makedocs(;
         "What was checked" => "validation.md",
         "Performance" => "performance.md",
         "Defects found in FabIO" => "fabio-py-defects.md",
+        "silx.io parity" => "silx-io-roadmap.md",
     ],
     checkdocs = :exports,
 )

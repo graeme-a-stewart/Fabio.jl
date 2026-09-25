@@ -6,6 +6,11 @@ working state that lives in neither.
 
 ## Where things stand
 
+**Phase 5 (silx.io foundations) is done**: `DataUrl` and `getdata`, compression by magic plus
+bzip2/xz/zstd, and EDF SPEC mnemonics. See [docs/silx-io-roadmap.md](docs/silx-io-roadmap.md),
+which plans Phases 6 to 11 and records what Phase 5 built and how it was checked against silx.
+The rest of this section describes the state at the close of Phase 4.
+
 **Status: Phase 4 complete — the roadmap in `DESIGN.md` is finished.** 28 readers across 24
 registry entries, 15 of which also write, plus conversion, file series, normalised metadata,
 FileIO.jl registration and a command-line converter.
@@ -155,11 +160,6 @@ Carried forward, and still true:
 - **MarCCD goniostat fields beyond the first few.** Only fields anchored at the start of one of
   the header's fixed-size sections are read, because the section offsets are certain while a
   running field count is not.
-- **Compression is detected by extension, not magic.** A gzip or bzip2 file under a misleading
-  name is not recognised — `100nmfilmonglass_1_1.img` above is exactly that case. FabIO has the
-  same limitation. Detecting `BZh` and `\x1f\x8b` by magic would be a small, strictly better
-  change. Note this now cuts both ways: `writeimage` compresses on a `.gz` destination, so the
-  two are at least symmetric.
 - **Tiled TIFF** is refused with a clear message but not implemented, as is **BigTIFF**.
 - **Compressed TIFF** (LZW, PackBits, Deflate) is not implemented; compression is per strip, so
   such files are also multi-strip.
@@ -218,8 +218,7 @@ value:
    claim them without the caveat the README currently carries.
 2. **Settle the open questions above that only need a file** — a non-square TY5, an `l`-type
    Fit2D mask, a real LImA or Lambda file, an Eiger master file.
-3. **Detect compression by magic**, not extension. Small, strictly better, and FabIO shares the
-   limitation.
+3. ~~**Detect compression by magic**~~ — done in Phase 5, along with bzip2, xz and zstd.
 4. **Registration and release.** The package has a UUID and a version of `0.1.0-DEV`; nothing
    has been tagged or registered. Aqua and JET now run as part of the suite, and the missing
    `[compat]` bounds Aqua found — which on their own would have kept the package out of the
