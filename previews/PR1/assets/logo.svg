@@ -1,0 +1,117 @@
+<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgLight" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f2f3f8"/>
+    </radialGradient>
+    <radialGradient id="beamGlowLight" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2a2f4a" stop-opacity="0.06"/>
+      <stop offset="60%" stop-color="#2a2f4a" stop-opacity="0.015"/>
+      <stop offset="100%" stop-color="#2a2f4a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softLight" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+    <filter id="ringHaloLight" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5.5"/>
+    </filter>
+    <filter id="ringHaloLightSoft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- badge -->
+  <rect x="20" y="20" width="560" height="560" rx="64" fill="url(#bgLight)" stroke="#d7d9e6" stroke-width="2"/>
+
+  <!-- faint pixel grid, lower-left quadrant, representing raster / 2D image data -->
+  <g opacity="0.55">
+    <clipPath id="quadLight">
+      <rect x="52" y="352" width="248" height="248" rx="8"/>
+    </clipPath>
+    <g clip-path="url(#quadLight)">
+      <g stroke="#c7cade" stroke-width="1">
+        <line x1="52" y1="352" x2="52" y2="600"/><line x1="83" y1="352" x2="83" y2="600"/>
+        <line x1="114" y1="352" x2="114" y2="600"/><line x1="145" y1="352" x2="145" y2="600"/>
+        <line x1="176" y1="352" x2="176" y2="600"/><line x1="207" y1="352" x2="207" y2="600"/>
+        <line x1="238" y1="352" x2="238" y2="600"/><line x1="269" y1="352" x2="269" y2="600"/>
+        <line x1="300" y1="352" x2="300" y2="600"/>
+        <line x1="52" y1="352" x2="300" y2="352"/><line x1="52" y1="383" x2="300" y2="383"/>
+        <line x1="52" y1="414" x2="300" y2="414"/><line x1="52" y1="445" x2="300" y2="445"/>
+        <line x1="52" y1="476" x2="300" y2="476"/><line x1="52" y1="507" x2="300" y2="507"/>
+        <line x1="52" y1="538" x2="300" y2="538"/><line x1="52" y1="569" x2="300" y2="569"/>
+        <line x1="52" y1="600" x2="300" y2="600"/>
+      </g>
+      <rect x="238" y="352" width="31" height="31" fill="#aab0d4" opacity="0.55"/>
+      <rect x="269" y="383" width="31" height="31" fill="#aab0d4" opacity="0.4"/>
+      <rect x="207" y="352" width="31" height="31" fill="#aab0d4" opacity="0.35"/>
+    </g>
+  </g>
+
+  <!-- central detector face -->
+  <circle cx="300" cy="300" r="230" fill="url(#beamGlowLight)"/>
+
+  <!-- diffraction rings: halo + core per ring, varied intensity like real Bragg peak strengths -->
+  <!-- ring 1: r=68, strong -->
+  <circle cx="300" cy="300" r="68" fill="none" stroke="#565d84" stroke-width="12" opacity="0.16" filter="url(#ringHaloLight)"/>
+  <circle cx="300" cy="300" r="68" fill="none" stroke="#454b70" stroke-width="2.6" opacity="0.85"/>
+
+  <!-- ring 2: r=115, weaker -->
+  <circle cx="300" cy="300" r="115" fill="none" stroke="#7a81ab" stroke-width="8" opacity="0.09" filter="url(#ringHaloLightSoft)"/>
+  <circle cx="300" cy="300" r="115" fill="none" stroke="#7a81ab" stroke-width="1.6" opacity="0.45"/>
+
+  <!-- ring 3: r=167, medium-strong (structure factor variation) -->
+  <circle cx="300" cy="300" r="167" fill="none" stroke="#6b7299" stroke-width="10" opacity="0.13" filter="url(#ringHaloLight)"/>
+  <circle cx="300" cy="300" r="167" fill="none" stroke="#5e6590" stroke-width="2.1" opacity="0.62"/>
+
+  <!-- ring 4: r=224, faint outer, ~80% of center-edge distance -->
+  <circle cx="300" cy="300" r="224" fill="none" stroke="#9aa1c4" stroke-width="6" opacity="0.08" filter="url(#ringHaloLightSoft)"/>
+  <circle cx="300" cy="300" r="224" fill="none" stroke="#9aa1c4" stroke-width="1.2" opacity="0.35"/>
+
+  <!-- fine detector speckle/noise across rings for realism -->
+  <g fill="#5e6590">
+    <circle cx="256" cy="245" r="1" opacity="0.35"/><circle cx="349" cy="252" r="1" opacity="0.3"/>
+    <circle cx="238" cy="300" r="1" opacity="0.32"/><circle cx="365" cy="303" r="1" opacity="0.3"/>
+    <circle cx="272" cy="360" r="1" opacity="0.3"/><circle cx="332" cy="358" r="1" opacity="0.32"/>
+    <circle cx="204" cy="272" r="1" opacity="0.25"/><circle cx="398" cy="284" r="1" opacity="0.25"/>
+    <circle cx="216" cy="366" r="1" opacity="0.22"/><circle cx="382" cy="372" r="1" opacity="0.25"/>
+    <circle cx="180" cy="230" r="1" opacity="0.22"/><circle cx="422" cy="240" r="1" opacity="0.22"/>
+    <circle cx="150" cy="330" r="1" opacity="0.18"/><circle cx="450" cy="320" r="1" opacity="0.2"/>
+  </g>
+
+  <!-- crosshair beam center -->
+  <line x1="300" y1="250" x2="300" y2="270" stroke="#7a81ab" stroke-width="1.5"/>
+  <line x1="300" y1="330" x2="300" y2="350" stroke="#7a81ab" stroke-width="1.5"/>
+  <line x1="250" y1="300" x2="270" y2="300" stroke="#7a81ab" stroke-width="1.5"/>
+  <line x1="330" y1="300" x2="350" y2="300" stroke="#7a81ab" stroke-width="1.5"/>
+  <circle cx="300" cy="300" r="5" fill="#2a2f4a" opacity="0.25" filter="url(#ringHaloLightSoft)"/>
+  <circle cx="300" cy="300" r="4.5" fill="#2a2f4a"/>
+
+  <!-- scattered Bragg peaks (neutral), pulled outward to sit near the new ring positions -->
+  <g>
+    <circle cx="300" cy="76" r="10" fill="#565d84" opacity="0.20" filter="url(#ringHaloLightSoft)"/>
+    <circle cx="300" cy="76" r="6" fill="#454b70" opacity="0.9"/>
+    <circle cx="300" cy="524" r="10" fill="#565d84" opacity="0.20" filter="url(#ringHaloLightSoft)"/>
+    <circle cx="300" cy="524" r="6" fill="#454b70" opacity="0.9"/>
+    <circle cx="76" cy="300" r="10" fill="#565d84" opacity="0.20" filter="url(#ringHaloLightSoft)"/>
+    <circle cx="76" cy="300" r="6" fill="#454b70" opacity="0.9"/>
+    <circle cx="524" cy="300" r="10" fill="#565d84" opacity="0.20" filter="url(#ringHaloLightSoft)"/>
+    <circle cx="524" cy="300" r="6" fill="#454b70" opacity="0.9"/>
+    <circle cx="205" cy="137" r="4.5" fill="#7a81ab" opacity="0.75"/>
+    <circle cx="395" cy="137" r="4.5" fill="#7a81ab" opacity="0.75"/>
+    <circle cx="205" cy="463" r="4.5" fill="#7a81ab" opacity="0.75"/>
+    <circle cx="395" cy="463" r="4.5" fill="#7a81ab" opacity="0.75"/>
+    <circle cx="130" cy="200" r="3.5" fill="#9aa1c4" opacity="0.7"/>
+    <circle cx="470" cy="400" r="3.5" fill="#9aa1c4" opacity="0.7"/>
+    <circle cx="130" cy="400" r="3.5" fill="#9aa1c4" opacity="0.7"/>
+  </g>
+
+  <!-- the three Julia-brand peaks, nested naturally into the pattern, with matching halo -->
+  <g>
+    <circle cx="470" cy="200" r="20" fill="#CB3C33" opacity="0.22" filter="url(#ringHaloLight)"/>
+    <circle cx="470" cy="200" r="14" fill="#CB3C33"/>
+    <circle cx="422" cy="248" r="20" fill="#389826" opacity="0.22" filter="url(#ringHaloLight)"/>
+    <circle cx="422" cy="248" r="14" fill="#389826"/>
+    <circle cx="368" cy="173" r="20" fill="#9558B2" opacity="0.22" filter="url(#ringHaloLight)"/>
+    <circle cx="368" cy="173" r="14" fill="#9558B2"/>
+  </g>
+</svg>
