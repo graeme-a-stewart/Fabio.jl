@@ -40,6 +40,7 @@ NexusLike
 register!
 formats
 formatnames
+supportedextensions
 findformat
 FormatEntry
 Magic

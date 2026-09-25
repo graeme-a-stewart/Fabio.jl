@@ -39,5 +39,6 @@ include("hdf5/structure.jl")
 include("hdf5/read.jl")
 include("hdf5/nexus.jl")
 include("hdf5/sparse.jl")
+include("hdf5/url.jl")
 
 end # module

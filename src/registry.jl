@@ -108,6 +108,26 @@ removes that failure mode.
 formats() = copy(REGISTRY)
 
 """
+    supportedextensions(; writable=false) -> Vector{String}
+
+Every registered file extension as a glob pattern (`"*.edf"`), sorted and without duplicates.
+With `writable = true`, only those of formats that can also be written.
+
+This is silx's `silx.io.supported_extensions()`, useful for building a file-dialog filter or
+a directory glob. Extensions are only a fallback for detection here, as in FabIO: a file with
+none of these can still be opened if its magic bytes are recognised, and a compressed file
+(`.gz`, `.bz2`, `.xz`, `.zst`) opens under any of them.
+"""
+function supportedextensions(; writable::Bool = false)
+    exts = String[]
+    for e in REGISTRY
+        (writable ? e.writer : e.reader) || continue
+        append!(exts, "*." .* e.extensions)
+    end
+    return sort!(unique!(exts))
+end
+
+"""
     formatnames() -> Vector{Symbol}
 """
 formatnames() = [e.name for e in REGISTRY]

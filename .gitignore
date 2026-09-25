@@ -35,6 +35,7 @@ docs/src/index.md
 docs/src/validation.md
 docs/src/performance.md
 docs/src/fabio-py-defects.md
+docs/src/silx-io-roadmap.md
 
 # Finder metadata, which macOS scatters through any directory it has been shown
 .DS_Store

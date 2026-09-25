@@ -350,3 +350,86 @@ layoutkeys(::EDF) = (
 
 """EDF stores every type this package knows. See [`storagetypes`](@ref)."""
 storagetypes(::EDF) = Tuple(sort!(collect(keys(EDF_TYPE_NAMES)); by = string))
+
+# ------------------------------------------------------------------- SPEC mnemonics
+
+"""
+    edfmnemonics(header, base) -> OrderedDict{String,Union{String,Nothing}}
+
+The name → value table that SPEC writes into an EDF header as two parallel,
+whitespace-separated lists, `<base>_mne` and `<base>_pos`. For example,
+`motor_mne = "samy samz"` with `motor_pos = "1.5 -0.25"` gives
+`"samy" => "1.5", "samz" => "-0.25"`.
+
+The bases in common use are `"motor"` (positioners), `"counter"` (scalers), `"UB"` (the
+orientation matrix, see [`edfsample`](@ref)) and `"sample"` (the unit cell).
+
+Values stay strings, like every other header value; convert them with `parse`. The pairing
+follows silx's `EdfFabioReader._get_mnemonic_key` exactly:
+
+- a name with no matching value maps to `nothing`;
+- a value with no matching name is dropped;
+- if either key is missing, it is treated as an empty list, so a header with neither gives an
+  empty table.
+
+Lookup is case-sensitive, as it is in FabIO and silx.
+
+```julia
+m = Fabio.edfmnemonics(header(frame), "motor")
+parse(Float64, m["samy"])
+```
+"""
+function edfmnemonics(h::Header, base::AbstractString)
+    names = split(string(get(h, base * "_mne", "")))
+    values = split(string(get(h, base * "_pos", "")))
+    out = OrderedDict{String,Union{String,Nothing}}()
+    for (i, name) in enumerate(names)
+        out[String(name)] = i <= length(values) ? String(values[i]) : nothing
+    end
+    return out
+end
+
+"""
+    hasedfsample(header) -> Bool
+
+Whether the header carries the four keys [`edfsample`](@ref) needs: `UB_mne`, `UB_pos`,
+`sample_mne` and `sample_pos`. This is silx's `has_ub_matrix` test.
+"""
+hasedfsample(h::Header) = all(k -> haskey(h, k), ("UB_mne", "UB_pos", "sample_mne", "sample_pos"))
+
+"""
+    edfsample(header) -> Union{Nothing,NamedTuple}
+
+The sample's unit cell and orientation matrix, as SPEC records them in an EDF header, or
+`nothing` if the header does not carry them (see [`hasedfsample`](@ref)).
+
+Returns `(unit_cell_abc, unit_cell_alphabetagamma, ub_matrix)`, named after the `NXsample`
+fields silx maps them to:
+
+| field | from | |
+|---|---|---|
+| `unit_cell_abc` | `sample` mnemonics `U0 U1 U2` | lattice lengths |
+| `unit_cell_alphabetagamma` | `sample` mnemonics `U3 U4 U5` | lattice angles |
+| `ub_matrix` | `UB` mnemonics `UB0` … `UB8` | 3×3, with `UB0 UB1 UB2` as the first **row** |
+
+`ub_matrix` is the mathematical matrix, indexed `ub[row, column]` as it is written on paper
+and as numpy holds it. Units are whatever SPEC recorded, usually Å and degrees; nothing is
+converted.
+
+Throws `ArgumentError` naming the missing mnemonic if the keys are present but incomplete,
+where silx fails with a bare `KeyError`.
+"""
+function edfsample(h::Header)
+    hasedfsample(h) || return nothing
+    ub = edfmnemonics(h, "UB")
+    s = edfmnemonics(h, "sample")
+    function value(table, base, name)
+        v = get(table, name, nothing)
+        v === nothing && throw(ArgumentError("EDF header has no value for $base mnemonic $name"))
+        return parse(Float64, v)
+    end
+    abc = [value(s, "sample", "U$i") for i = 0:2]
+    angles = [value(s, "sample", "U$i") for i = 3:5]
+    m = [value(ub, "UB", "UB$(3 * (r - 1) + (c - 1))") for r = 1:3, c = 1:3]
+    return (unit_cell_abc = abc, unit_cell_alphabetagamma = angles, ub_matrix = m)
+end

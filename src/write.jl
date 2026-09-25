@@ -141,18 +141,15 @@ function writeimage(
     # Reading decompresses transparently, so writing compresses transparently, or the two are
     # not inverses: without this, `out.edf.gz` would receive a plain EDF under a name that
     # says otherwise, and reading it straight back would fail on the missing gzip header.
-    sfx == ".gz" || throw(
-        UnsupportedFormatError(
-            "writing $sfx output is not supported; only .gz is, matching what the reader " *
-            "can decompress without an optional package",
-        ),
-    )
+    # `.gz` is built in; the others need the same codec package that reading them does, and
+    # asking for the codec before writing anything fails with that package's name.
+    _compressioncodec(sfx)
     tmp = tempname() * last(splitext(stem))
     try
         _writeplain(tmp, frames, format === nothing ? writeformatforpath(stem) : format;
                     kwargs...)
         Base.open(path, "w") do io
-            Base.write(io, transcode(GzipCompressor, Base.read(tmp)))
+            Base.write(io, compress(sfx, Base.read(tmp)))
         end
     finally
         isfile(tmp) && rm(tmp; force = true)

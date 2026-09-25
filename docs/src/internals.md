@@ -12,6 +12,11 @@ MmapSource
 BufferSource
 opensource
 splitfragment
+stripcompression
+sniffcompression
+compressioncodec
+decompress
+compress
 sourcefragment
 AbstractDataCodec
 RawBlob

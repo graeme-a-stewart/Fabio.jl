@@ -20,7 +20,7 @@ trees in and out of HDF5, and interpreting NeXus `NXdata` groups.
 
 | silx.io module | What it does |
 |---|---|
-| `utils.open` | Opens any supported file as an h5py-like object. Accepts `file::/path` and `file::/path[slice]`, and `http(s)://` for HSDS servers through h5pyd. |
+| `utils.open` | Opens any supported file as an h5py-like object. Accepts any `DataUrl` form (`file::/path`, `file?path=/p&slice=0`), and `http(s)://` for HSDS servers through h5pyd. |
 | `utils.get_data` | Reads an array from a URL. Two schemes: `silx:` goes through `open` plus a NeXus path; `fabio:` calls `fabio.open` directly and uses the slice to pick a frame. With no scheme it tries both. |
 | `url.DataUrl` | Parses and builds those URLs: scheme, file path, data path, data slice. Forms include `?path=&slice=`, the `::` shorthand, and relative paths. |
 | `fabioh5.File` | **Shows a FabIO image, or a file series, as a NeXus tree** (layout in §3.2). Header values become typed per-frame vectors. EDF `motor_mne`/`motor_pos`/`counter_*` become positioners and counters, and `UB_*`/`sample_*` become an `NXsample`. |
@@ -126,9 +126,11 @@ be byte-identical in layout to silx's output. Reading silx-written files back th
 **Type conversion of header values** follows `FabioReader._convert_value`. A key present in
 every frame becomes a typed vector: `Int64` if every value parses as an integer, `Float64` if
 every value parses as a number, otherwise strings. Space-separated numeric lists become 2-D.
-Missing entries become NaN, `-1` or `""` depending on type. That logic belongs in the core
-(`src/nexusview.jl`), not the HDF5 extension. It is a header operation, and doing it in the core
-keeps the tree fully usable without HDF5.
+Missing entries become NaN for floats, `0` for integers and `""` for strings, and a key with no
+value in any frame becomes a vector of `Int8` zeros (`_get_none_value`,
+`_convert_metadata_vector`). That logic belongs in the core (`src/nexusview.jl`), not the HDF5
+extension. It is a header operation, and doing it in the core keeps the tree fully usable
+without HDF5.
 
 ## 4. Phased plan
 
@@ -137,33 +139,53 @@ a state that can be released on its own, with tests. Validation follows STATUS.m
 reference implementation generates the expected values. Here that is `uv run --with silx
 --with fabio --with h5py`.
 
-### Phase 5: Foundations — URLs, compression, EDF mnemonics  *(small, core only)*
+### Phase 5: Foundations — URLs, compression, EDF mnemonics  *(done)*
 
-Everything later depends on this phase. None of it needs HDF5.
+Everything later depends on this phase. What was built, and where it departed from the plan:
 
-1. **`DataUrl`** (`src/url.jl`): an immutable struct with `scheme`, `file_path`, `data_path`,
-   `data_slice`. It parses every form in silx's `test_url.py`: `silx:`/`fabio:` schemes,
-   `?path=…&slice=…`, the `::` shorthand, `[…]` slices, relative paths, Windows drive letters.
-   `string(url)` produces the canonical form, and `isvalid(url)` gives a reason when it is not
-   valid. Slices are stored **as written** (0-based, numpy syntax) and converted to Julia
-   indices when used, so the URL text stays identical to silx's. Port `test_url.py` as a
-   table-driven test.
-2. **`getdata(url)`**. For `fabio:`, use `readimage` with `frame = slice + 1`. For `silx:`,
-   defer to the Phase 6 tree. With no scheme, try both, as silx does. Until Phase 6 lands,
-   `silx:` on a non-HDF5 file raises a clear `UnsupportedFormatError`.
-3. **`splitfragment` accepts a trailing `[slice]`**, so `openimage("f.h5::/entry/data[3]")`
-   and `readimage` pick the frame. This is backwards compatible.
-4. **Compression extensions**: `FabioCodecBzip2Ext`, `FabioCodecXzExt` and
-   `FabioCodecZstdExt` as weak dependencies, completing the stub in `src/source.jl:decompress`.
-   Also do **detection by magic** (`BZh`, `\x1f\x8b`, `\xfd7zXZ`, `\x28\xb5\x2f\xfd`), which
-   STATUS.md "What is next" item 3 already lists.
-5. **EDF mnemonic parsing**: `edfmnemonics(hdr, "motor") -> OrderedDict{String,Union{String,Nothing}}`,
-   following `EdfFabioReader._get_mnemonic_key` exactly, including the case where one list is
-   longer than the other. Also `edfub(hdr) -> (abc, alphabetagamma, ub::Matrix)`.
-6. `supported_extensions()` returns `"*.ext"` globs from the registry, as silx does.
+1. **`DataUrl`** (`src/url.jl`), exported. Parses and prints silx's forms: `silx:`/`fabio:`/
+   `http(s):` schemes, `?path=…&slice=…`, the `::` shorthand, relative paths, Windows drive
+   letters, and silx's quirks (`+` and `%XX` decoding in the query, the last duplicate key
+   winning, a warning for unknown keys). Accessors `scheme`, `filepath`, `datapath`,
+   `dataslice`, `invalidreason`, `isabsolute`, `urlstring`; `isvalid(url)`; equality and hashing
+   as silx defines them. Slices are kept as written (`Int`, `SliceRange`, `SliceEllipsis`,
+   0-based, numpy order), and `juliaindices(slice, dims)` converts them, including negative
+   indices, clamping and negative steps.
+   *Tested against silx itself:* `test/generate_silx_cases.py` runs 63 strings (all of silx's
+   `test_url.py`, plus edge cases such as non-ASCII paths and UNC-style `//host`) and 18 built
+   URLs through silx 3.1.2's `DataUrl`, writing `test/silx_url_cases.jl`. It also applies 34
+   slices with numpy, writing `test/numpy_slice_cases.jl`.
+   *Departure:* the plan listed `[…]` slices. Neither silx's parser nor FabIO supports them.
+   silx's own `get_data` docstring shows `fabio:/…/image.edf::[0]`, but silx parses that as an
+   invalid URL ("fabio URLs cannot have a data path"). The slice syntax is `?slice=` only.
+2. **`getdata(url)`**, exported. `fabio:` reads a frame (the slice is a single 0-based index,
+   default 0). No scheme tries `silx:` then `fabio:`, and reports both errors if both fail.
+   *Went further than planned:* `silx:` already works for **HDF5** files through
+   `getdataset(::NexusLike, …)` in the HDF5 extension. It reads a hyperslab where HDF5 can,
+   and it also handles reversed steps, which silx refuses because h5py does. A `silx:` path
+   into an image file (the NeXus view) raises `UnsupportedFormatError` that suggests a `fabio:`
+   URL, until Phase 6.
+   *Cross-checked against `silx.io.get_data`* (silx 3.1.2, FabIO 2026.6.0) on EDF, bzip2 EDF and
+   HDF5 files, for 12 URLs. Shapes and position-sensitive checksums all agree, except the
+   reversed-step case, which silx cannot read.
+3. **`readimage(url::DataUrl)`** replaces the planned `[slice]` suffix on `splitfragment`,
+   since FabIO's `::` syntax has no slice either. The data path becomes the `::` address, and
+   the slice picks the frame, so a frame and its header are reachable from a URL.
+4. **Compression**: `FabioCodecBzip2Ext`, `FabioCodecXzExt` and `FabioCodecZstdExt` add
+   methods to `compressioncodec(::Val{suffix})`, which `decompress` and the new `compress`
+   use. So `writeimage` now writes every suffix it can read, not only `.gz`. **Detection by
+   magic** (`sniffcompression`) runs when the suffix says nothing. bzip2 needs its 10-byte
+   signature (`BZh`, a level digit, then block or end-of-stream magic), not just the printable
+   `BZh`.
+5. **EDF mnemonics**: `edfmnemonics(hdr, base)`, `hasedfsample(hdr)` and `edfsample(hdr)`
+   (named `edfub` in the plan) return `(unit_cell_abc, unit_cell_alphabetagamma, ub_matrix)`.
+   They were checked against silx's `fabioh5.File` reading the same EDF: positioners, counters,
+   unit cell and UB matrix all agree.
+6. **`supportedextensions(; writable=false)`** returns sorted `"*.ext"` globs from the
+   registry.
 
-*Exit:* all of silx's `test_url.py` cases pass. `getdata("fabio:…::[i]")` agrees with
-`silx.io.get_data` on the committed fixtures. bz2 fixtures read.
+*Exit criteria met:* 837 new assertions (2246 → 3083), with the full suite green on Julia 1.13.
+The Aqua and JET quality checks pass, and the Documenter build is clean.
 
 ### Phase 6: The tree model and the NeXus view of image files  *(core; the centrepiece)*
 

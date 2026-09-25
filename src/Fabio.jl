@@ -70,7 +70,9 @@ export ImageFrame,
     writeimage,
     convertimage,
     readheader,
-    readheaders
+    readheaders,
+    DataUrl,
+    getdata
 
 include("types.jl")
 include("md5.jl")
@@ -88,6 +90,7 @@ include("file.jl")
 include("api.jl")
 include("write.jl")
 include("series.jl")
+include("url.jl")
 
 include("formats/bruker.jl")
 include("formats/cbf.jl")
